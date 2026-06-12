@@ -1,0 +1,1121 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Standplaatsenkaart — Wortel Rommelmarkt</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'Segoe UI', sans-serif; background: #1a2a1a; overflow: hidden; height: 100vh; display: flex; flex-direction: column; }
+
+.header { background: #1C2B3A; color: #fff; padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; z-index: 10; }
+.header h1 { font-size: 15px; font-weight: 700; }
+.header .sub { font-size: 10px; opacity: .6; }
+.test-badge { background: #B8922A; color: #fff; font-size: 10px; font-weight: 700; padding: 3px 10px; border-radius: 999px; }
+
+.toolbar { display: flex; gap: 6px; padding: 8px 12px; background: #243444; border-bottom: 1px solid #334; flex-shrink: 0; flex-wrap: wrap; align-items: center; }
+.modus-knop { padding: 5px 14px; border-radius: 999px; font-size: 12px; font-weight: 600; border: 1.5px solid #445; background: transparent; cursor: pointer; color: #aaa; transition: all .2s; }
+.modus-knop.actief { background: #1C2B3A; color: #fff; border-color: #B8922A; }
+.modus-knop:hover:not(.actief) { color: #fff; border-color: #667; }
+.toolbar-stats { margin-left: auto; display: flex; gap: 12px; font-size: 11px; color: #aaa; }
+.toolbar-stats .v { color: #2ECC71; font-weight: 700; }
+.toolbar-stats .b { color: #E74C3C; font-weight: 700; }
+
+.legende { display: flex; gap: 12px; padding: 6px 12px; background: #1e2e1e; border-bottom: 1px solid #2a3a2a; flex-shrink: 0; flex-wrap: wrap; align-items: center; }
+.leg { display: flex; align-items: center; gap: 5px; font-size: 10px; color: #aaa; }
+.leg-k { width: 12px; height: 12px; border-radius: 2px; }
+
+/* KAART CANVAS */
+.kaart-outer { flex: 1; overflow: hidden; position: relative; cursor: grab; }
+.kaart-outer:active { cursor: grabbing; }
+.kaart-inner { position: absolute; transform-origin: 0 0; }
+
+/* SVG kaart achtergrond */
+.kaart-svg { display: block; }
+
+/* STANDPLAATS BLOKJES OP DE KAART */
+.sp-overlay { position: absolute; top: 0; left: 0; pointer-events: none; }
+.sp {
+  position: absolute;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 2px;
+  cursor: pointer;
+  pointer-events: all;
+  transition: filter .1s, transform .1s;
+  border: 1px solid transparent;
+  flex-direction: column;
+  line-height: 1;
+}
+.sp .nr { font-size: 7px; font-weight: 700; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.5); }
+.sp.vrij      { background: rgba(46,204,113,.75); border-color: rgba(39,174,96,.8); }
+.sp.vrij:hover { background: #2ECC71; transform: scale(1.2); z-index: 10; filter: brightness(1.2); }
+.sp.bezet     { background: rgba(231,76,60,.7); border-color: rgba(192,57,43,.8); }
+.sp.mijn      { background: #B8922A; border-color: #8a6a1a; box-shadow: 0 0 0 2px #fff, 0 0 0 3px #B8922A; z-index: 5; }
+.sp.aansluit  { background: rgba(52,152,219,.8); border-color: rgba(41,128,185,.9); }
+.sp.aansluit:hover { background: #3498DB; transform: scale(1.2); z-index: 10; }
+.sp.geblokkeerd { background: rgba(243,156,18,.6); border-color: rgba(211,84,0,.7); }
+.sp.geselecteerd { background: #B8922A; border-color: #8a6a1a; box-shadow: 0 0 0 2px #fff, 0 0 0 3px #B8922A; z-index: 5; }
+
+/* ZOOM KNOPPEN */
+.zoom-knoppen { position: absolute; bottom: 16px; right: 16px; display: flex; flex-direction: column; gap: 4px; z-index: 20; }
+.zoom-btn { width: 36px; height: 36px; background: #1C2B3A; color: #fff; border: 1px solid #445; border-radius: 6px; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background .2s; }
+.zoom-btn:hover { background: #2A3F55; }
+.zoom-reset { font-size: 12px; font-weight: 700; }
+
+/* DETAIL PANEL */
+.panel { position: absolute; right: 0; top: 0; bottom: 0; width: 260px; background: #fff; box-shadow: -4px 0 20px rgba(0,0,0,.3); z-index: 100; transform: translateX(100%); transition: transform .3s; display: flex; flex-direction: column; }
+.panel.open { transform: translateX(0); }
+.panel-head { background: #1C2B3A; color: #fff; padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; }
+.panel-head h3 { font-size: 14px; font-weight: 700; }
+.panel-sluit { background: rgba(255,255,255,.15); border: none; color: #fff; width: 26px; height: 26px; border-radius: 50%; font-size: 14px; cursor: pointer; }
+.panel-body { flex: 1; padding: 16px; overflow-y: auto; }
+
+.info-blok { background: #f8f9fb; border-radius: 6px; padding: 10px 12px; margin-bottom: 12px; }
+.info-rij { display: flex; justify-content: space-between; font-size: 12px; color: #666; margin-bottom: 5px; }
+.info-rij:last-child { margin-bottom: 0; font-weight: 700; color: #1C2B3A; border-top: 1px solid #dde; padding-top: 5px; margin-top: 3px; }
+.mijn-blok { background: linear-gradient(135deg, #B8922A, #8a6a1a); color: #fff; border-radius: 8px; padding: 12px; margin-bottom: 12px; text-align: center; }
+.mijn-blok .groot { font-size: 24px; font-weight: 900; }
+.mijn-blok .klein { font-size: 10px; opacity: .8; margin-top: 2px; }
+.tip { border-radius: 6px; padding: 8px 10px; margin-bottom: 10px; font-size: 11px; }
+.tip.blauw { background: #d6eaf8; border: 1px solid #3498DB; color: #1a5a8a; }
+.tip.groen { background: #e8f8ef; border: 1px solid #27AE60; color: #1a5a2a; }
+.btn { width: 100%; padding: 10px; border-radius: 5px; font-size: 12px; font-weight: 600; border: none; cursor: pointer; margin-bottom: 6px; transition: all .2s; }
+.btn-goud { background: #B8922A; color: #fff; }
+.btn-goud:hover { background: #9a7820; }
+.btn-blauw { background: #1C2B3A; color: #fff; }
+.btn-blauw:hover { background: #2A3F55; }
+.btn-rand { background: #fff; color: #1C2B3A; border: 1.5px solid #dde; }
+.code-invoer { width: 100%; padding: 8px 10px; border: 1.5px solid #dde; border-radius: 5px; font-size: 12px; margin-bottom: 6px; text-transform: uppercase; letter-spacing: .08em; }
+.code-invoer:focus { outline: none; border-color: #1C2B3A; }
+
+.toast { position: fixed; top: 16px; left: 50%; transform: translateX(-50%) translateY(-8px); padding: 10px 24px; border-radius: 999px; font-size: 13px; font-weight: 600; opacity: 0; transition: all .3s; z-index: 9999; pointer-events: none; white-space: nowrap; box-shadow: 0 4px 16px rgba(0,0,0,.2); }
+.toast.zichtbaar { opacity: 1; transform: translateX(-50%) translateY(0); }
+.toast.succes { background: #27AE60; color: #fff; }
+.toast.fout   { background: #E74C3C; color: #fff; }
+.toast.info   { background: #1C2B3A; color: #fff; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>🗺️ Standplaatsenkaart — Wortel Rommelmarkt</h1>
+    <div class="sub">Klik op een standplaats · Scroll om te zoomen · Sleep om te bewegen</div>
+  </div>
+  <span class="test-badge">🧪 TESTVERSIE 2017</span>
+</div>
+
+<div class="toolbar">
+  <button class="modus-knop actief" id="knop-bestaande" onclick="setModus('bestaande')">🔑 Bestaande standhouder</button>
+  <button class="modus-knop" id="knop-nieuw" onclick="setModus('nieuw')">✨ Nieuwe standhouder</button>
+  <button class="modus-knop" id="knop-beheer" onclick="setModus('beheer')" style="display:none">⚙️ Beheer</button>
+  <div class="toolbar-stats">
+    Vrij: <span class="v" id="stat-vrij">-</span>
+    &nbsp;Bezet: <span class="b" id="stat-bezet">-</span>
+  </div>
+</div>
+
+<div class="legende">
+  <div class="leg"><div class="leg-k" style="background:rgba(46,204,113,.75)"></div> Vrij</div>
+  <div class="leg"><div class="leg-k" style="background:rgba(231,76,60,.7)"></div> Bezet</div>
+  <div class="leg"><div class="leg-k" style="background:#B8922A"></div> Uw standplaats</div>
+  <div class="leg"><div class="leg-k" style="background:rgba(52,152,219,.8)"></div> Aansluitend</div>
+  <div class="leg"><div class="leg-k" style="background:rgba(243,156,18,.6)"></div> Tijdelijk bezet</div>
+</div>
+
+<div class="kaart-outer" id="kaartOuter" style="flex:1">
+  <div class="kaart-inner" id="kaartInner">
+    <!-- SVG ACHTERGROND KAART -->
+    <svg class="kaart-svg" id="kaartSvg" xmlns="http://www.w3.org/2000/svg"></svg>
+    <!-- STANDPLAATSEN OVERLAY -->
+    <div class="sp-overlay" id="spOverlay"></div>
+  </div>
+
+  <div class="zoom-knoppen">
+    <button class="zoom-btn" onclick="zoom(1.2)">+</button>
+    <button class="zoom-btn zoom-reset" onclick="resetZoom()">⟳</button>
+    <button class="zoom-btn" onclick="zoom(0.8)">−</button>
+  </div>
+</div>
+
+<div class="panel" id="panel">
+  <div class="panel-head">
+    <h3 id="panel-titel">Standplaats</h3>
+    <button class="panel-sluit" onclick="sluitPanel()">✕</button>
+  </div>
+  <div class="panel-body" id="panel-body"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const SUPABASE_URL = 'https://pvqfpgkzhfokgcyabuhn.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB2cWZwZ2t6aGZva2djeWFidWhuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4MzMyNTksImV4cCI6MjA5NDQwOTI1OX0.wauNK-AeI0-WoNjiMpanX-twTr7EvJ1zWuLiqktN7SU';
+const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ── KAART CONFIGURATIE ──
+// Gebaseerd op de plattegrond 2017
+// Eenheid: pixels op de kaart (1px = ~0.5m in werkelijkheid)
+
+const KAART_B = 1400;  // breedte canvas
+const KAART_H = 1800;  // hoogte canvas
+const SP_B = 14;       // breedte standplaats blokje
+const SP_H = 10;       // hoogte standplaats blokje
+const SP_GAP = 2;      // ruimte tussen blokjes
+
+// DREEF DEFINITIES
+// Elke dreef heeft: startX, startY, richting, en reeks
+// Verticale dreven: standplaatsen lopen van noord naar zuid
+// sp_per_kant = aantal standplaatsen per kant
+
+const DREVEN = [
+  // DREEF 1: nrs 001-199 — verticaal, centrale dreef
+  { id: 'd1', x: 320, y: 120, richting: 'v', reeks: 1,
+    links_van: 1,   links_tot: 199, links_stap: 2,
+    rechts_van: 2,  rechts_tot: 198, rechts_stap: 2,
+    naam: 'Dreef 1 (001–199)' },
+
+  // DREEF 2: nrs 200-399 — verticaal, parallel aan dreef 1
+  { id: 'd2', x: 520, y: 120, richting: 'v', reeks: 2,
+    links_van: 201, links_tot: 399, links_stap: 2,
+    rechts_van: 200, rechts_tot: 398, rechts_stap: 2,
+    naam: 'Dreef 2 (200–399)' },
+
+  // DREEF 3: nrs 500-699 — verticaal
+  { id: 'd3', x: 720, y: 120, richting: 'v', reeks: 4,
+    links_van: 501, links_tot: 699, links_stap: 2,
+    rechts_van: 500, rechts_tot: 698, rechts_stap: 2,
+    naam: 'Dreef 3 (500–699)' },
+
+  // DREEF 4: nrs 800-899 — verticaal, meest rechts
+  { id: 'd4', x: 920, y: 120, richting: 'v', reeks: 5,
+    links_van: 801, links_tot: 899, links_stap: 2,
+    rechts_van: 800, rechts_tot: 898, rechts_stap: 2,
+    naam: 'Dreef 4 (800–899)' },
+
+  // DREEF 5: nrs 400-499 — horizontaal (Schooldreef)
+  { id: 'd5', x: 160, y: 780, richting: 'h', reeks: 3,
+    links_van: 401, links_tot: 499, links_stap: 2,
+    rechts_van: 400, rechts_tot: 498, rechts_stap: 2,
+    naam: 'Schooldreef (400–499)' },
+];
+
+// ── STATE ──
+let standplaatsen = [];
+let modus = 'bestaande';
+let mijnNrs = [];
+let geselecteerd = null;
+let selectieStart = null;   // eerste klik bij meervoudige selectie
+let selectieEinde = null;   // tweede klik
+let selectieKant = null;    // Links of Rechts
+let selectieReeks = null;   // reeks nummer
+let sessie = 'S' + Math.random().toString(36).substr(2,8);
+let huidigCode = null; // bijgehouden na code check
+
+// Pan/zoom state
+let schaal = 0.65;
+let panX = 20, panY = 20;
+let isPanning = false;
+let startPan = { x: 0, y: 0 };
+
+// ── INIT ──
+window.addEventListener('load', async function() {
+  bouwSvgAchtergrond();
+  toast('Standplaatsen laden...', 'info');
+
+  try {
+    const res = await db.from('standplaatsen')
+      .select('nummer,nummer_display,reeks,kant,beschikbaar,geblokkeerd_tot,geblokkeerd_door')
+      .order('nummer');
+    if (res.error) throw res.error;
+    standplaatsen = res.data || [];
+    bouwSpOverlay();
+    updateStats();
+    toast('', '');
+  } catch(e) {
+    console.error(e);
+    toast('Fout: ' + (e.message||e), 'fout');
+  }
+
+  initPanZoom();
+  updateTransform();
+});
+
+// ── SVG ACHTERGROND BOUWEN ──
+function bouwSvgAchtergrond() {
+  const svg = document.getElementById('kaartSvg');
+  svg.setAttribute('width', KAART_B);
+  svg.setAttribute('height', KAART_H);
+  svg.setAttribute('viewBox', '0 0 ' + KAART_B + ' ' + KAART_H);
+
+  let svgHtml = '';
+
+  // Achtergrond
+  svgHtml += `<rect width="${KAART_B}" height="${KAART_H}" fill="#2d4a2d"/>`;
+
+  // Gras achtergrond
+  svgHtml += `<rect x="0" y="0" width="${KAART_B}" height="${KAART_H}" fill="#3a5a3a" rx="0"/>`;
+
+  // Parking links
+  svgHtml += `<rect x="20" y="700" width="120" height="300" fill="#555" rx="4"/>`;
+  svgHtml += `<text x="80" y="858" fill="#fff" font-size="14" text-anchor="middle" font-weight="bold">P</text>`;
+  svgHtml += `<text x="80" y="875" fill="#ccc" font-size="9" text-anchor="middle">PARKING</text>`;
+
+  // Gevangenis/Kolonie rechtsboven
+  svgHtml += `<rect x="1050" y="20" width="320" height="500" fill="#8a8a7a" rx="4"/>`;
+  svgHtml += `<text x="1210" y="270" fill="#fff" font-size="11" text-anchor="middle">GEVANGENIS</text>`;
+  svgHtml += `<text x="1210" y="285" fill="#ccc" font-size="9" text-anchor="middle">KOLONIE</text>`;
+
+  // Verticale dreven bouwen
+  DREVEN.filter(d => d.richting === 'v').forEach(dreef => {
+    const dreefB = 40; // breedte van de dreef (pad)
+    const linksX = dreef.x - dreefB/2 - 32;
+    const rechtsX = dreef.x + dreefB/2 + 2;
+    const dreefH = KAART_H - dreef.y - 60;
+
+    // Dreef pad
+    svgHtml += `<rect x="${dreef.x - dreefB/2}" y="${dreef.y}" width="${dreefB}" height="${dreefH}" fill="#c8b88a"/>`;
+    // Bomen links
+    for (let y = dreef.y + 20; y < dreef.y + dreefH - 20; y += 35) {
+      svgHtml += `<circle cx="${dreef.x - dreefB/2 - 20}" cy="${y}" r="12" fill="#2a5a2a" opacity=".8"/>`;
+      svgHtml += `<circle cx="${dreef.x + dreefB/2 + 20}" cy="${y}" r="12" fill="#2a5a2a" opacity=".8"/>`;
+    }
+    // Label
+    svgHtml += `<text x="${dreef.x}" y="${dreef.y - 6}" fill="#fff" font-size="9" text-anchor="middle" font-weight="bold" opacity=".7">${dreef.naam}</text>`;
+  });
+
+  // Horizontale dreef (Schooldreef)
+  const sd = DREVEN.find(d => d.richting === 'h');
+  if (sd) {
+    const dreefH2 = 40;
+    const dreefB2 = KAART_B - sd.x - 100;
+    svgHtml += `<rect x="${sd.x}" y="${sd.y - dreefH2/2}" width="${dreefB2}" height="${dreefH2}" fill="#c8b88a"/>`;
+    // Bomen
+    for (let x = sd.x + 20; x < sd.x + dreefB2 - 20; x += 35) {
+      svgHtml += `<circle cx="${x}" cy="${sd.y - dreefH2/2 - 14}" r="10" fill="#2a5a2a" opacity=".8"/>`;
+      svgHtml += `<circle cx="${x}" cy="${sd.y + dreefH2/2 + 14}" r="10" fill="#2a5a2a" opacity=".8"/>`;
+    }
+    svgHtml += `<text x="${sd.x + 10}" y="${sd.y - dreefH2/2 - 4}" fill="#fff" font-size="9" font-weight="bold" opacity=".7">SCHOOLDREEF (400–499)</text>`;
+  }
+
+  // Ingang/kruispunt
+  svgHtml += `<rect x="295" y="755" width="70" height="70" fill="#a09080" rx="2"/>`;
+  svgHtml += `<text x="330" y="795" fill="#fff" font-size="8" text-anchor="middle">INGANG</text>`;
+
+  // Noord pijl
+  svgHtml += `<text x="40" y="40" fill="#fff" font-size="18" text-anchor="middle">↑</text>`;
+  svgHtml += `<text x="40" y="55" fill="#fff" font-size="9" text-anchor="middle">N</text>`;
+
+  svg.innerHTML = svgHtml;
+}
+
+// ── STANDPLAATSEN OVERLAY BOUWEN ──
+function bouwSpOverlay() {
+  const overlay = document.getElementById('spOverlay');
+  overlay.style.width = KAART_B + 'px';
+  overlay.style.height = KAART_H + 'px';
+  overlay.innerHTML = '';
+
+  DREVEN.forEach(dreef => {
+    if (dreef.richting === 'v') {
+      bouwVertikaleStanden(overlay, dreef);
+    } else {
+      bouwHorizontaleStanden(overlay, dreef);
+    }
+  });
+}
+
+function bouwVertikaleStanden(overlay, dreef) {
+  const dreefB = 40;
+  const linksX = dreef.x - dreefB/2 - SP_B - 4;
+  const rechtsX = dreef.x + dreefB/2 + 4;
+
+  // Linkerkant (oneven)
+  let nrs = [];
+  for (let n = dreef.links_van; n <= dreef.links_tot; n += dreef.links_stap) nrs.push(n);
+  nrs.forEach((nr, i) => {
+    const sp = standplaatsen.find(s => s.nummer === nr);
+    if (!sp) return;
+    const y = dreef.y + i * (SP_H + SP_GAP);
+    maakSpEl(overlay, sp, linksX, y, SP_B, SP_H);
+  });
+
+  // Rechterkant (even)
+  nrs = [];
+  for (let n = dreef.rechts_van; n <= dreef.rechts_tot; n += dreef.rechts_stap) nrs.push(n);
+  nrs.forEach((nr, i) => {
+    const sp = standplaatsen.find(s => s.nummer === nr);
+    if (!sp) return;
+    const y = dreef.y + i * (SP_H + SP_GAP);
+    maakSpEl(overlay, sp, rechtsX, y, SP_B, SP_H);
+  });
+}
+
+function bouwHorizontaleStanden(overlay, dreef) {
+  const dreefH2 = 40;
+  const bovenY = dreef.y - dreefH2/2 - SP_H - 4;
+  const onderY = dreef.y + dreefH2/2 + 4;
+
+  // Bovenkant (oneven)
+  let nrs = [];
+  for (let n = dreef.links_van; n <= dreef.links_tot; n += dreef.links_stap) nrs.push(n);
+  nrs.forEach((nr, i) => {
+    const sp = standplaatsen.find(s => s.nummer === nr);
+    if (!sp) return;
+    const x = dreef.x + i * (SP_B + SP_GAP);
+    maakSpEl(overlay, sp, x, bovenY, SP_B, SP_H);
+  });
+
+  // Onderkant (even)
+  nrs = [];
+  for (let n = dreef.rechts_van; n <= dreef.rechts_tot; n += dreef.rechts_stap) nrs.push(n);
+  nrs.forEach((nr, i) => {
+    const sp = standplaatsen.find(s => s.nummer === nr);
+    if (!sp) return;
+    const x = dreef.x + i * (SP_B + SP_GAP);
+    maakSpEl(overlay, sp, x, onderY, SP_B, SP_H);
+  });
+}
+
+function maakSpEl(overlay, sp, x, y, b, h) {
+  const s = getStatus(sp);
+  const el = document.createElement('div');
+  el.className = 'sp ' + s;
+  el.id = 'sp' + sp.nummer;
+  el.style.left = x + 'px';
+  el.style.top = y + 'px';
+  el.style.width = b + 'px';
+  el.style.height = h + 'px';
+  el.innerHTML = '<span class="nr">' + sp.nummer_display + '</span>';
+  el.title = 'Nr. ' + sp.nummer_display;
+  if (s !== 'bezet' && s !== 'geblokkeerd') {
+    el.onclick = () => klik(sp);
+  }
+  overlay.appendChild(el);
+}
+
+function herteken() {
+  standplaatsen.forEach(sp => {
+    const el = document.getElementById('sp' + sp.nummer);
+    if (!el) return;
+    const s = getStatus(sp);
+    el.className = 'sp ' + s;
+    el.onclick = (s !== 'bezet' && s !== 'geblokkeerd') ? () => klik(sp) : null;
+  });
+  updateStats();
+}
+
+// ── STATUS ──
+function getStatus(sp) {
+  if (!sp.beschikbaar) return 'bezet';
+  if (geblokkeerd(sp)) return 'geblokkeerd';
+  if (mijnNrs.includes(sp.nummer)) return 'mijn';
+  if (modus === 'nieuw' && aansluitend(sp)) return 'aansluit';
+  return 'vrij';
+}
+
+function geblokkeerd(sp) {
+  return sp.geblokkeerd_tot && new Date(sp.geblokkeerd_tot) > new Date() && sp.geblokkeerd_door !== sessie;
+}
+
+function aansluitend(sp) {
+  if (!sp.beschikbaar || geblokkeerd(sp)) return false;
+  const bezettInKant = standplaatsen.filter(s => s.reeks === sp.reeks && s.kant === sp.kant && !s.beschikbaar);
+  if (bezettInKant.length === 0) return true;
+  const b1 = standplaatsen.find(s => s.nummer === sp.nummer - 2 && s.kant === sp.kant);
+  const b2 = standplaatsen.find(s => s.nummer === sp.nummer + 2 && s.kant === sp.kant);
+  return (b1 && !b1.beschikbaar) || (b2 && !b2.beschikbaar);
+}
+
+function updateStats() {
+  const vrij = standplaatsen.filter(s => s.beschikbaar && !geblokkeerd(s)).length;
+  const bezet = standplaatsen.filter(s => !s.beschikbaar).length;
+  document.getElementById('stat-vrij').textContent = vrij;
+  document.getElementById('stat-bezet').textContent = bezet;
+}
+
+// ── KLIK ──
+
+// ── FASEBEWAKING ──
+async function checkFaseToegang(type) {
+  try {
+    const { data } = await db.from('instellingen').select('*');
+    const inst = {};
+    if (data) data.forEach(d => inst[d.sleutel] = d.waarde);
+    const nu = new Date();
+    const gesloten = inst['inschrijvingen_gesloten'] === 'true';
+
+    if (gesloten) {
+      toast('Inschrijvingen zijn momenteel gesloten.', 'fout');
+      return false;
+    }
+    if (type === 'bestaande') {
+      const faseA = inst['fase_a_opening'] ? new Date(inst['fase_a_opening']) : null;
+      if (faseA && nu < faseA) {
+        const datum = faseA.toLocaleDateString('nl-BE', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
+        const tijd = faseA.toLocaleTimeString('nl-BE', {hour:'2-digit', minute:'2-digit'});
+        toast('Inschrijvingen openen op ' + datum + ' om ' + tijd + '.', 'fout');
+        return false;
+      }
+    }
+    if (type === 'nieuw') {
+      const faseC = inst['fase_c_opening'] ? new Date(inst['fase_c_opening']) : null;
+      if (faseC && nu < faseC) {
+        const datum = faseC.toLocaleDateString('nl-BE', {weekday:'long', day:'numeric', month:'long', year:'numeric'});
+        const tijd = faseC.toLocaleTimeString('nl-BE', {hour:'2-digit', minute:'2-digit'});
+        toast('Inschrijvingen voor nieuwe standhouders openen op ' + datum + ' om ' + tijd + '.', 'fout');
+        return false;
+      }
+    }
+    return true;
+  } catch(e) {
+    console.error('Fase check fout:', e);
+    return true;
+  }
+}
+
+async function klik(sp) {
+  const s = getStatus(sp);
+
+  if (modus === 'bestaande') {
+    // Controleer fase VOOR het tonen van het panel
+    const toegang = await checkFaseToegang('bestaande');
+    if (!toegang) return;
+    toonPanelBestaande(sp, s);
+
+  } else if (modus === 'nieuw') {
+    // Controleer fase VOOR alles
+    const toegang = await checkFaseToegang('nieuw');
+    if (!toegang) return;
+
+    // Controleer aansluitingsregel
+    if (s === 'vrij' && !aansluitend(sp)) {
+      const bezett = standplaatsen.filter(x => x.reeks === sp.reeks && x.kant === sp.kant && !x.beschikbaar);
+      if (bezett.length > 0) { toast('Kies een aansluitende (blauwe) standplaats', 'fout'); return; }
+    }
+
+    // Meervoudige selectie
+    if (!selectieStart) {
+      selectieStart = sp;
+      selectieKant = sp.kant;
+      selectieReeks = sp.reeks;
+      selectieEinde = null;
+      markeerSelectie([sp.nummer]);
+      toast('Startplaats Nr. ' + sp.nummer_display + ' gekozen — klik nu de eindplaats', 'info');
+      toonPanelSelectie(sp);
+    } else if (sp.kant !== selectieKant || sp.reeks !== selectieReeks) {
+      resetSelectie();
+      selectieStart = sp;
+      selectieKant = sp.kant;
+      selectieReeks = sp.reeks;
+      markeerSelectie([sp.nummer]);
+      toast('Nieuwe startplaats Nr. ' + sp.nummer_display + ' — klik nu de eindplaats', 'info');
+      toonPanelSelectie(sp);
+    } else {
+      selectieEinde = sp;
+      const nrs = getNummersInBereik(selectieStart, selectieEinde);
+      if (nrs.length === 0) {
+        toast('Ongeldige selectie — kies plaatsen op dezelfde kant', 'fout');
+        return;
+      }
+      const alleVrij = nrs.every(n => {
+        const s = standplaatsen.find(x => x.nummer === n);
+        return s && s.beschikbaar && !geblokkeerd(s);
+      });
+      if (!alleVrij) {
+        toast('Een of meerdere geselecteerde plaatsen zijn bezet', 'fout');
+        resetSelectie();
+        return;
+      }
+      markeerSelectie(nrs);
+      toonPanelNieuwMeervoudig(nrs);
+    }
+
+  } else {
+    toonPanelBeheer(sp, s);
+  }
+}
+
+function getNummersInBereik(start, einde) {
+  // Beide op dezelfde kant en reeks
+  if (start.kant !== einde.kant || start.reeks !== einde.reeks) return [];
+  const van = Math.min(start.nummer, einde.nummer);
+  const tot = Math.max(start.nummer, einde.nummer);
+  const nrs = [];
+  // Stap van 2 want even/oneven
+  for (let n = van; n <= tot; n += 2) {
+    nrs.push(n);
+  }
+  return nrs;
+}
+
+function markeerSelectie(nrs) {
+  // Reset eerst alle geselecteerde
+  standplaatsen.forEach(sp => {
+    const el = document.getElementById('sp' + sp.nummer);
+    if (!el) return;
+    if (el.classList.contains('geselecteerd')) {
+      el.className = 'sp ' + getStatus(sp);
+    }
+  });
+  // Markeer nieuwe selectie
+  nrs.forEach(n => {
+    const el = document.getElementById('sp' + n);
+    if (el) el.className = 'sp geselecteerd';
+  });
+}
+
+function resetSelectie() {
+  selectieStart = null;
+  selectieEinde = null;
+  selectieKant = null;
+  selectieReeks = null;
+  herteken();
+}
+
+// ── PANELS ──
+function toonPanelBestaande(sp, s) {
+  if (mijnNrs.includes(sp.nummer) && huidigCode) {
+    // Eigen standplaats aangeklikt en code bekend → direct formulier tonen
+    toonFormulierBestaande(huidigCode);
+    return;
+  }
+  document.getElementById('panel-titel').textContent = 'Nr. ' + sp.nummer_display;
+  const b = document.getElementById('panel-body');
+  if (mijnNrs.includes(sp.nummer)) {
+    // Eigen standplaats maar geen code meer beschikbaar
+    b.innerHTML = '<div class="mijn-blok"><div class="groot">Nr. ' + sp.nummer_display + '</div><div class="klein">' + sp.kant + 'erkant - 4m - Reeks ' + sp.reeks + '</div></div>'
+      + '<p style="font-size:11px;color:#27AE60;text-align:center;margin-bottom:10px">Uw standplaats</p>'
+      + '<button class="btn btn-rand" onclick="sluitPanel()">Sluiten</button>';
+  } else {
+    b.innerHTML = '<div class="info-blok">'
+      + '<div class="info-rij"><span>Nummer</span><span>' + sp.nummer_display + '</span></div>'
+      + '<div class="info-rij"><span>Kant</span><span>' + sp.kant + 'erkant</span></div>'
+      + '<div class="info-rij"><span>Status</span><span>' + (s === 'bezet' ? 'Bezet' : 'Vrij') + '</span></div>'
+      + '</div>'
+      + '<p style="font-size:11px;color:#999;margin-bottom:8px">Voer uw code in:</p>'
+      + '<input type="text" class="code-invoer" id="code-in" placeholder="XXXX-XXXX-XXXX" onkeydown="if(event.key===\'Enter\')checkCode()" style="text-transform:uppercase">'
+      + '<button class="btn btn-blauw" onclick="checkCode()">Controleren</button>'
+      + '<button class="btn btn-rand" onclick="sluitPanel()">Annuleren</button>';
+  }
+  openPanel();
+}
+
+async function checkCode() {
+  const code = document.getElementById('code-in')?.value.trim();
+  if (!code) return;
+  const toegang = await checkFaseToegang('bestaande');
+  if (!toegang) return;
+  toast('Controleren...', 'info');
+  try {
+    const res = await db.from('standhouder_codes').select('*,gratis,categorie').eq('code', code).limit(1);
+    if (res.error || !res.data?.length) { toast('Code niet gevonden', 'fout'); return; }
+    const rec = res.data[0];
+    huidigCode = rec;
+
+    // Genereer alle standnummers van deze standhouder
+    mijnNrs = [];
+    for (let n = rec.standnummer_van; n <= rec.standnummer_tot; n += 2) mijnNrs.push(n);
+
+    herteken();
+    toast('Uw standplaatsen zijn goud gemarkeerd!', 'succes');
+
+    // Scroll naar eerste standplaats
+    const eerste = document.getElementById('sp' + rec.standnummer_van);
+    if (eerste) eerste.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+    // Toon direct het formulier met alle gegevens ingevuld
+    setTimeout(() => {
+      toonFormulierBestaande(rec);
+    }, 600);
+
+  } catch(e) { toast('Fout bij controleren', 'fout'); }
+}
+
+
+function toonFormulierBestaande(rec) {
+  const van = String(rec.standnummer_van).padStart(3,'0');
+  const tot = String(rec.standnummer_tot).padStart(3,'0');
+  const meters = rec.meters;
+  const prijs = (meters * 2.5).toFixed(2).replace('.',',');
+  const nrs = [];
+  for (let n = rec.standnummer_van; n <= rec.standnummer_tot; n += 2) nrs.push(n);
+
+  document.getElementById('panel-titel').textContent = 'Bevestig uw gegevens';
+  const b = document.getElementById('panel-body');
+  b.innerHTML =
+    '<div class="mijn-blok"><div class="groot">Nrs. ' + van + '-' + tot + '</div>'
+    + '<div class="klein">' + meters + ' meter - EUR ' + prijs + '</div></div>'
+    + '<div class="info-blok" style="margin-bottom:10px">'
+    + '<div class="info-rij"><span>Standplaatsen</span><span>Nrs. ' + van + '-' + tot + '</span></div>'
+    + '<div class="info-rij"><span>Meters</span><span>' + meters + ' meter</span></div>'
+    + '<div class="info-rij"><span>Te betalen</span><span>EUR ' + prijs + '</span></div>'
+    + '</div>'
+    + '<p style="font-size:11px;color:#27AE60;margin-bottom:8px">Uw gegevens zijn vooraf ingevuld. Controleer en pas aan indien nodig.</p>'
+    + '<input type="text" class="code-invoer" id="bs-voornaam" placeholder="Voornaam *" value="' + (rec.naam ? rec.naam.split(' ')[0] : '') + '" style="margin-bottom:6px;letter-spacing:0;text-transform:none">'
+    + '<input type="text" class="code-invoer" id="bs-achternaam" placeholder="Achternaam *" value="' + (rec.naam ? rec.naam.split(' ').slice(1).join(' ') : '') + '" style="margin-bottom:6px;letter-spacing:0;text-transform:none">'
+    + '<input type="text" class="code-invoer" id="bs-adres" placeholder="Straat en huisnummer *" value="' + (rec.adres || '') + '" style="margin-bottom:6px;letter-spacing:0;text-transform:none">'
+    + '<div style="display:flex;gap:6px;margin-bottom:6px">'
+    + '<input type="text" class="code-invoer" id="bs-postcode" placeholder="Postcode *" value="' + (rec.postcode || '') + '" style="width:90px;letter-spacing:0;text-transform:none">'
+    + '<input type="text" class="code-invoer" id="bs-gemeente" placeholder="Gemeente *" value="' + (rec.gemeente || '') + '" style="flex:1;letter-spacing:0;text-transform:none">'
+    + '</div>'
+    + '<input type="email" class="code-invoer" id="bs-email" placeholder="E-mailadres *" value="' + (rec.email || '') + '" style="margin-bottom:6px;letter-spacing:0;text-transform:none">'
+    + '<input type="tel" class="code-invoer" id="bs-gsm" placeholder="GSM-nummer *" value="' + (rec.gsm || '') + '" style="margin-bottom:10px;letter-spacing:0;text-transform:none">'
+    + '<div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:12px;font-size:11px;color:#666">'
+    + '<input type="checkbox" id="bs-gdpr" style="margin-top:2px;flex-shrink:0">'
+    + '<label for="bs-gdpr">Ik ga akkoord dat Sport- en Vriendenkring Wortel mijn gegevens mag gebruiken voor de organisatie van de rommelmarkt.</label>'
+    + '</div>'
+    + '<button class="btn btn-goud" onclick="submitBestaandeStandhouder(' + JSON.stringify(nrs) + ',' + meters + ',' + (meters * 2.5) + ')">Doorgaan naar betaling</button>'
+    + '<button class="btn btn-rand" onclick="sluitPanel()">Annuleren</button>';
+  openPanel();
+}
+
+function toonPanelSelectie(sp) {
+  document.getElementById('panel-titel').textContent = 'Selectie starten';
+  const b = document.getElementById('panel-body');
+  b.innerHTML = '<div class="tip blauw"><strong>Stap 1 van 2 — Startplaats gekozen</strong><br>Klik nu op de eindplaats voor meerdere plaatsen, of bevestig direct voor 1 plaats.</div>'
+    + '<div class="mijn-blok"><div class="groot">Nr. ' + sp.nummer_display + '</div><div class="klein">' + sp.kant + 'erkant · startplaats</div></div>'
+    + '<div class="info-blok">'
+    + '<div class="info-rij"><span>Startplaats</span><span>Nr. ' + sp.nummer_display + '</span></div>'
+    + '<div class="info-rij"><span>Kant</span><span>' + sp.kant + 'erkant</span></div>'
+    + '<div class="info-rij"><span>Reeks</span><span>Reeks ' + sp.reeks + '</span></div>'
+    + '</div>'
+    + '<p style="font-size:11px;color:#999;margin-bottom:8px;text-align:center">Klik een eindplaats op de kaart voor meerdere plaatsen</p>'
+    + '<button class="btn btn-goud" onclick="bevestigNieuwMeervoudig([' + sp.nummer + '])">Enkel deze plaats (4m - EUR 10,00)</button>'
+    + '<button class="btn btn-rand" onclick="resetSelectie();sluitPanel()">Annuleren</button>';
+  openPanel();
+}
+
+function toonPanelNieuwMeervoudig(nrs) {
+  const meters = nrs.length * 4;
+  const prijs = (meters * 2.5).toFixed(2).replace('.', ',');
+  const van = String(Math.min.apply(null, nrs)).padStart(3,'0');
+  const tot = String(Math.max.apply(null, nrs)).padStart(3,'0');
+  const sp = standplaatsen.find(function(s) { return s.nummer === nrs[0]; });
+  const bezett = standplaatsen.filter(function(x) { return x.reeks === sp.reeks && x.kant === sp.kant && !x.beschikbaar; });
+
+  document.getElementById('panel-titel').textContent = nrs.length + ' plaatsen geselecteerd';
+  const b = document.getElementById('panel-body');
+  b.innerHTML = '<div class="tip ' + (bezett.length > 0 ? 'blauw' : 'groen') + '"><strong>' + (bezett.length > 0 ? 'Aansluitende selectie' : 'Startpositie in deze reeks') + '</strong><br>' + nrs.length + ' aaneengesloten plaatsen geselecteerd.</div>'
+    + '<div class="mijn-blok"><div class="groot">Nrs. ' + van + '-' + tot + '</div><div class="klein">' + sp.kant + 'erkant - ' + meters + ' meter - Reeks ' + sp.reeks + '</div></div>'
+    + '<div class="info-blok">'
+    + '<div class="info-rij"><span>Van</span><span>Nr. ' + van + '</span></div>'
+    + '<div class="info-rij"><span>Tot</span><span>Nr. ' + tot + '</span></div>'
+    + '<div class="info-rij"><span>Aantal plaatsen</span><span>' + nrs.length + '</span></div>'
+    + '<div class="info-rij"><span>Meters</span><span>' + meters + ' meter</span></div>'
+    + '<div class="info-rij"><span>Prijs</span><span>EUR ' + prijs + '</span></div>'
+    + '</div>'
+    + '<button class="btn btn-goud" onclick="bevestigNieuwMeervoudig([' + nrs.join(',') + '])">Bevestigen</button>'
+    + '<button class="btn btn-rand" onclick="resetSelectie();sluitPanel()">Annuleren</button>';
+  openPanel();
+}
+
+function toonPanelNieuw(sp) {
+  toonPanelSelectie(sp);
+}
+
+async function bevestigNieuwMeervoudig(nrs) {
+  if (!nrs || !nrs.length) return;
+  toast('Reserveren...', 'info');
+  try {
+    const verloop = new Date(Date.now() + 600000).toISOString();
+    for (const n of nrs) {
+      await db.from('standplaatsen')
+        .update({ geblokkeerd_tot: verloop, geblokkeerd_door: sessie })
+        .eq('nummer', n).eq('beschikbaar', true);
+      const sp = standplaatsen.find(s => s.nummer === n);
+      if (sp) { sp.geblokkeerd_tot = verloop; sp.geblokkeerd_door = sessie; }
+    }
+    mijnNrs = nrs;
+    resetSelectie();
+
+    const meters = nrs.length * 4;
+    const prijs = (meters * 2.5).toFixed(2).replace('.', ',');
+    const van = String(Math.min.apply(null, nrs)).padStart(3,'0');
+    const tot = String(Math.max.apply(null, nrs)).padStart(3,'0');
+
+    toast('Nrs. ' + van + '-' + tot + ' gereserveerd! 10 min.', 'succes');
+    document.getElementById('panel-titel').textContent = 'Gegevens invullen';
+    document.getElementById('panel-body').innerHTML =
+      '<div class="mijn-blok"><div class="groot">Nrs. ' + van + '-' + tot + '</div><div class="klein">' + meters + ' meter - EUR ' + prijs + ' - 10 min.</div></div>'
+      + '<p style="font-size:11px;color:#E74C3C;text-align:center;margin-bottom:10px">⏳ U heeft 10 minuten om uw gegevens in te vullen</p>'
+      + '<div class="info-blok" style="margin-bottom:10px">'
+      + '<div class="info-rij"><span>Standplaatsen</span><span>Nrs. ' + van + '-' + tot + '</span></div>'
+      + '<div class="info-rij"><span>Meters</span><span>' + meters + ' meter</span></div>'
+      + '<div class="info-rij"><span>Te betalen</span><span>EUR ' + prijs + '</span></div>'
+      + '</div>'
+      + '<input type="text" class="code-invoer" id="nw-voornaam" placeholder="Voornaam *" style="margin-bottom:6px;letter-spacing:0">'
+      + '<input type="text" class="code-invoer" id="nw-achternaam" placeholder="Achternaam *" style="margin-bottom:6px;letter-spacing:0;text-transform:none">'
+      + '<input type="text" class="code-invoer" id="nw-adres" placeholder="Straat en huisnummer *" style="margin-bottom:6px;letter-spacing:0;text-transform:none">'
+      + '<div style="display:flex;gap:6px;margin-bottom:6px">'
+      + '<input type="text" class="code-invoer" id="nw-postcode" placeholder="Postcode *" style="width:90px;letter-spacing:0;text-transform:none">'
+      + '<input type="text" class="code-invoer" id="nw-gemeente" placeholder="Gemeente *" style="flex:1;letter-spacing:0;text-transform:none">'
+      + '</div>'
+      + '<input type="email" class="code-invoer" id="nw-email" placeholder="E-mailadres *" style="margin-bottom:6px;letter-spacing:0;text-transform:none">'
+      + '<input type="tel" class="code-invoer" id="nw-gsm" placeholder="GSM-nummer *" style="margin-bottom:10px;letter-spacing:0;text-transform:none">'
+      + '<div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:12px;font-size:11px;color:#666">'
+      + '<input type="checkbox" id="nw-gdpr" style="margin-top:2px;flex-shrink:0">'
+      + '<label for="nw-gdpr">Ik ga akkoord dat Sport- en Vriendenkring Wortel mijn gegevens mag gebruiken voor de organisatie van de rommelmarkt.</label>'
+      + '</div>'
+      + '<button class="btn btn-goud" onclick="submitNieuweStandhouder(' + JSON.stringify(nrs) + ',' + meters + ',' + prijs.replace(',','.') + ')">Doorgaan naar betaling</button>'
+      + '<button class="btn btn-rand" onclick="sluitPanel()">Annuleren</button>';
+  } catch(e) {
+    toast('Fout bij reserveren', 'fout');
+    console.error(e);
+  }
+}
+
+function toonPanelBeheer(sp, s) {
+  document.getElementById('panel-titel').textContent = 'Beheer Nr. ' + sp.nummer_display;
+  document.getElementById('panel-body').innerHTML = `
+    <div class="info-blok">
+      <div class="info-rij"><span>Nummer</span><span>${sp.nummer_display}</span></div>
+      <div class="info-rij"><span>Kant</span><span>${sp.kant}erkant</span></div>
+      <div class="info-rij"><span>Status</span><span>${s === 'bezet' ? '🔴 Bezet' : '🟢 Vrij'}</span></div>
+    </div>
+    <button class="btn ${s === 'bezet' ? 'btn-goud' : 'btn-blauw'}" onclick="toggleStatus(${sp.nummer},${sp.beschikbaar})">
+      ${s === 'bezet' ? '🟢 Zet vrij' : '🔴 Zet bezet'}
+    </button>
+    <button class="btn btn-rand" onclick="sluitPanel()">Annuleren</button>`;
+  openPanel();
+}
+
+
+// ── FORMULIER NA RESERVATIE ──
+function submitNieuweStandhouder(nrs, meters, prijs) {
+  const voornaam = document.getElementById('nw-voornaam')?.value.trim();
+  const achternaam = document.getElementById('nw-achternaam')?.value.trim();
+  const adres = document.getElementById('nw-adres')?.value.trim();
+  const postcode = document.getElementById('nw-postcode')?.value.trim();
+  const gemeente = document.getElementById('nw-gemeente')?.value.trim();
+  const email = document.getElementById('nw-email')?.value.trim();
+  const gsm = document.getElementById('nw-gsm')?.value.trim();
+  const gdpr = document.getElementById('nw-gdpr')?.checked;
+
+  if (!voornaam || !achternaam || !adres || !postcode || !gemeente || !email || !gsm) {
+    toast('Vul alle verplichte velden in', 'fout');
+    return;
+  }
+  if (!gdpr) {
+    toast('Ga akkoord met het gebruik van uw gegevens', 'fout');
+    return;
+  }
+
+  // Sla boeking op en toon betaalpagina
+  slaBoekingOp({
+    type: 'nieuw',
+    voornaam, achternaam, adres, postcode, gemeente, email, gsm,
+    nrs, meters, prijs
+  });
+}
+
+function submitBestaandeStandhouder(nrs, meters, prijs) {
+  const voornaam = document.getElementById('bs-voornaam')?.value.trim();
+  const achternaam = document.getElementById('bs-achternaam')?.value.trim();
+  const adres = document.getElementById('bs-adres')?.value.trim();
+  const postcode = document.getElementById('bs-postcode')?.value.trim();
+  const gemeente = document.getElementById('bs-gemeente')?.value.trim();
+  const email = document.getElementById('bs-email')?.value.trim();
+  const gsm = document.getElementById('bs-gsm')?.value.trim();
+  const gdpr = document.getElementById('bs-gdpr')?.checked;
+
+  if (!voornaam || !achternaam || !adres || !postcode || !gemeente || !email || !gsm) {
+    toast('Vul alle verplichte velden in', 'fout');
+    return;
+  }
+  if (!gdpr) {
+    toast('Ga akkoord met het gebruik van uw gegevens', 'fout');
+    return;
+  }
+
+  slaBoekingOp({
+    type: 'bestaande',
+    code: huidigCode ? huidigCode.code : null,
+    gratis: huidigCode ? (huidigCode.gratis || false) : false,
+    voornaam, achternaam, adres, postcode, gemeente, email, gsm,
+    nrs, meters, prijs
+  });
+}
+
+let huidigEmail = ''; // bewaar email voor betaalstap
+
+async function slaBoekingOp(data) {
+  toast('Boeking opslaan...', 'info');
+  huidigEmail = data.email || ''; // bewaar voor later gebruik
+  try {
+    const van = Math.min.apply(null, data.nrs);
+    const tot = Math.max.apply(null, data.nrs);
+    const isGratis = data.gratis === true;
+
+    const { error } = await db.from('boekingen').insert([{
+      type: data.type,
+      code: data.code || null,
+      voornaam: data.voornaam,
+      achternaam: data.achternaam,
+      adres: data.adres,
+      postcode: data.postcode,
+      gemeente: data.gemeente,
+      email: data.email,
+      gsm: data.gsm,
+      standnummer_van: van,
+      standnummer_tot: tot,
+      meters: data.meters,
+      prijs: isGratis ? 0 : data.prijs,
+      betaald: isGratis ? true : false
+    }]);
+
+    if (error) throw error;
+
+    // Zet standplaatsen definitief bezet
+    const kant = van % 2 === 0 ? 'Rechts' : 'Links';
+    await db.from('standplaatsen')
+      .update({ beschikbaar: false, geblokkeerd_tot: null, geblokkeerd_door: null })
+      .gte('nummer', van)
+      .lte('nummer', tot)
+      .eq('kant', kant);
+
+    // Als bestaande standhouder: code als gebruikt markeren
+    if (data.code) {
+      await db.from('standhouder_codes')
+        .update({ gebruikt: true })
+        .eq('code', data.code);
+    }
+
+    // Herlaad standplaatsen
+    const res = await db.from('standplaatsen')
+      .select('nummer,nummer_display,reeks,kant,beschikbaar,geblokkeerd_tot,geblokkeerd_door')
+      .order('nummer');
+    if (!res.error) standplaatsen = res.data;
+
+    mijnNrs = data.nrs;
+    herteken();
+
+    // Bepaal of gratis
+    const van3 = String(van).padStart(3,'0');
+    const tot3 = String(tot).padStart(3,'0');
+    const prijsTekst = isGratis ? 'Gratis' : 'EUR ' + data.prijs.toFixed(2).replace('.',',');
+
+    document.getElementById('panel-titel').textContent = 'Inschrijving bevestigd!';
+    document.getElementById('panel-body').innerHTML =
+      '<div class="mijn-blok"><div class="groot">Nrs. ' + van3 + '-' + tot3 + '</div>'
+      + '<div class="klein">' + data.meters + ' meter' + (isGratis ? ' - Gratis' : ' - EUR ' + data.prijs.toFixed(2).replace('.',',')) + '</div></div>'
+      + '<div class="info-blok">'
+      + '<div class="info-rij"><span>Naam</span><span>' + data.voornaam + ' ' + data.achternaam + '</span></div>'
+      + '<div class="info-rij"><span>E-mail</span><span>' + data.email + '</span></div>'
+      + '<div class="info-rij"><span>Standplaatsen</span><span>Nrs. ' + van3 + '-' + tot3 + '</span></div>'
+      + '<div class="info-rij"><span>Meters</span><span>' + data.meters + ' meter</span></div>'
+      + '<div class="info-rij"><span>Te betalen</span><span>' + prijsTekst + '</span></div>'
+      + '</div>'
+      + (isGratis
+        ? '<p style="font-size:11px;color:#27AE60;text-align:center;margin-bottom:14px">Uw standplaats is gratis. U ontvangt een bevestiging op ' + data.email + '</p>'
+        : '<p style="font-size:12px;font-weight:600;margin-bottom:10px;color:#1C2B3A">Kies uw betaalmethode:</p>'
+          + '<button class="btn btn-goud" style="margin-bottom:8px" onclick="toonQRKaart(\'' + van3 + '-' + tot3 + '\',' + data.prijs + ')">📱 Betalen via QR Code (Bancontact)</button>'
+          + '<button class="btn btn-rand" onclick="toonOvKaart(\'' + van3 + '-' + tot3 + '\',' + data.prijs + ')">🏦 Betalen via overschrijving</button>'
+      )
+      + '<button class="btn btn-rand" onclick="sluitPanel()">Sluiten</button>';
+
+    toast('Inschrijving opgeslagen!', 'succes');
+
+  } catch(e) {
+    console.error(e);
+    toast('Fout bij opslaan: ' + (e.message || 'probeer opnieuw'), 'fout');
+  }
+}
+
+function toonQRKaart(stand, prijs) {
+  const bedrag = Number(prijs).toFixed(2);
+  const mededeling = 'WRM-' + stand.replace(/[^0-9]/g, '-');
+  const qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent('WRM ' + stand + ' EUR' + bedrag);
+  document.getElementById('panel-body').innerHTML =
+    '<div class="mijn-blok"><div class="groot">QR Code</div><div class="klein">Scan met uw bankapp</div></div>'
+    + '<div style="text-align:center;margin-bottom:14px">'
+    + '<img src="' + qrUrl + '" alt="QR code" style="width:180px;height:180px;border:3px solid #B8922A;border-radius:8px">'
+    + '<p style="font-size:11px;color:#666;margin-top:8px">Scan met uw bankapp of Payconiq</p>'
+    + '</div>'
+    + '<div class="info-blok">'
+    + '<div class="info-rij"><span>Standplaats</span><span>Nrs. ' + stand + '</span></div>'
+    + '<div class="info-rij"><span>Mededeling</span><span>' + mededeling + '</span></div>'
+    + '<div class="info-rij"><span>Bedrag</span><span>EUR ' + bedrag.replace('.', ',') + '</span></div>'
+    + '</div>'
+    + '<button class="btn btn-rand" onclick="sluitPanel()">Sluiten</button>';
+}
+
+function toonOvKaart(stand, prijs) {
+  const bedrag = Number(prijs).toFixed(2);
+  const mededeling = 'WRM-' + stand.replace(/[^0-9]/g, '-');
+  
+  // Gebruik bewaard e-mailadres
+  const emailBest = huidigEmail || 
+                    document.getElementById('bs-email')?.value || 
+                    document.getElementById('nw-email')?.value || '';
+
+  document.getElementById('panel-titel').textContent = 'Overschrijvingsgegevens';
+  document.getElementById('panel-body').innerHTML =
+    '<div class="mijn-blok"><div class="groot">Overschrijving</div><div class="klein">Betaal binnen 10 dagen</div></div>'
+    + '<div class="info-blok" style="margin-bottom:14px">'
+    + '<div class="info-rij"><span>Begunstigde</span><span>SVK Wortel vzw</span></div>'
+    + '<div class="info-rij"><span>IBAN</span><span>BE__ ____ ____ ____</span></div>'
+    + '<div class="info-rij"><span>Mededeling</span><span>' + mededeling + '</span></div>'
+    + '<div class="info-rij"><span>Bedrag</span><span>EUR ' + bedrag.replace('.', ',') + '</span></div>'
+    + '</div>'
+    + '<div style="background:rgba(201,168,76,.08);border:1px solid rgba(201,168,76,.25);padding:14px;margin-bottom:14px">'
+    + '<p style="font-size:11px;font-weight:700;color:#B8922A;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">📧 Bevestig uw e-mailadres</p>'
+    + '<p style="font-size:11px;color:#666;margin-bottom:8px">Een bevestiging wordt verstuurd naar:</p>'
+    + '<input type="email" id="ov-email" value="' + emailBest + '" placeholder="uw@email.be" style="width:100%;padding:9px 12px;border:1px solid rgba(201,168,76,.3);background:var(--zwart);color:var(--wit);font-size:13px;margin-bottom:6px;font-family:\'DM Sans\',sans-serif;outline:none">'
+    + '<p style="font-size:10px;color:#999">Niet correct? Pas uw e-mailadres hierboven aan.</p>'
+    + '</div>'
+    + '<button class="btn btn-goud" style="width:100%;margin-bottom:8px" onclick="bevestigOvEmail(\'' + stand + '\',\'' + bedrag + '\',\'' + mededeling + '\')">✉️ Bevestig en stuur overzicht</button>'
+    + '<button class="btn btn-rand" style="width:100%" onclick="sluitPanel()">Annuleren</button>';
+}
+
+function bevestigOvEmail(stand, bedrag, mededeling) {
+  const email = document.getElementById('ov-email')?.value.trim();
+  if (!email || !email.includes('@')) {
+    toast('Voer een geldig e-mailadres in', 'fout');
+    return;
+  }
+
+  // TODO: Resend integratie - mail versturen
+  // Voor nu: toon bevestigingsbericht
+
+  document.getElementById('panel-titel').textContent = 'Inschrijving ontvangen!';
+  document.getElementById('panel-body').innerHTML =
+    '<div style="text-align:center;margin-bottom:16px">'
+    + '<div style="font-size:48px;margin-bottom:12px">✅</div>'
+    + '<h3 style="font-family:\'Cormorant Garamond\',serif;font-size:22px;color:#B8922A;margin-bottom:8px">Bijna klaar!</h3>'
+    + '</div>'
+    + '<div style="background:rgba(74,222,128,.06);border:1px solid rgba(74,222,128,.2);padding:14px;margin-bottom:12px;font-size:12px;color:#4ade80">'
+    + '📧 Een overzicht met overschrijvingsgegevens wordt verstuurd naar <strong>' + email + '</strong>'
+    + '</div>'
+    + '<div style="background:rgba(251,146,60,.06);border:1px solid rgba(251,146,60,.2);padding:14px;margin-bottom:12px;font-size:12px;color:#fb923c">'
+    + '⏳ Uw standplaats <strong>Nrs. ' + stand + '</strong> is voorlopig voor u gereserveerd voor <strong>10 dagen</strong>.<br><br>'
+    + 'Uw inschrijving wordt definitief na ontvangst van uw betaling van <strong>EUR ' + Number(bedrag).toFixed(2).replace('.', ',') + '</strong>.'
+    + '</div>'
+    + '<div style="font-size:11px;color:#666;margin-bottom:14px;line-height:1.6">'
+    + '<strong>Overschrijvingsgegevens:</strong><br>'
+    + 'Begunstigde: SVK Wortel vzw<br>'
+    + 'IBAN: BE__ ____ ____ ____<br>'
+    + 'Mededeling: ' + mededeling + '<br>'
+    + 'Bedrag: EUR ' + Number(bedrag).toFixed(2).replace('.', ',')
+    + '</div>'
+    + '<button class="btn btn-rand" style="width:100%" onclick="sluitPanel()">Sluiten</button>';
+}
+
+async function toggleStatus(nr, huidig) {
+  try {
+    await db.from('standplaatsen').update({ beschikbaar: !huidig, geblokkeerd_tot: null, geblokkeerd_door: null }).eq('nummer', nr);
+    const sp = standplaatsen.find(s => s.nummer === nr);
+    if (sp) sp.beschikbaar = !huidig;
+    herteken(); sluitPanel();
+    toast('Status gewijzigd!', 'succes');
+  } catch(e) { toast('Fout', 'fout'); }
+}
+
+// ── MODUS ──
+function setModus(m) {
+  modus = m; mijnNrs = [];
+  document.querySelectorAll('.modus-knop').forEach(k => k.classList.remove('actief'));
+  document.getElementById('knop-' + m).classList.add('actief');
+  herteken(); sluitPanel();
+}
+
+// ── PAN & ZOOM ──
+function initPanZoom() {
+  const outer = document.getElementById('kaartOuter');
+
+  outer.addEventListener('wheel', (e) => {
+    e.preventDefault();
+    const f = e.deltaY < 0 ? 1.1 : 0.9;
+    const rect = outer.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    panX = mx - (mx - panX) * f;
+    panY = my - (my - panY) * f;
+    schaal *= f;
+    schaal = Math.min(Math.max(schaal, 0.2), 4);
+    updateTransform();
+  }, { passive: false });
+
+  outer.addEventListener('mousedown', (e) => {
+    if (e.target.classList.contains('sp')) return;
+    isPanning = true;
+    startPan = { x: e.clientX - panX, y: e.clientY - panY };
+    outer.style.cursor = 'grabbing';
+  });
+
+  window.addEventListener('mousemove', (e) => {
+    if (!isPanning) return;
+    panX = e.clientX - startPan.x;
+    panY = e.clientY - startPan.y;
+    updateTransform();
+  });
+
+  window.addEventListener('mouseup', () => {
+    isPanning = false;
+    document.getElementById('kaartOuter').style.cursor = 'grab';
+  });
+
+  // Touch support
+  let lastTouchDist = 0;
+  outer.addEventListener('touchstart', (e) => {
+    if (e.touches.length === 2) {
+      lastTouchDist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+    } else if (e.touches.length === 1) {
+      isPanning = true;
+      startPan = { x: e.touches[0].clientX - panX, y: e.touches[0].clientY - panY };
+    }
+  }, { passive: true });
+
+  outer.addEventListener('touchmove', (e) => {
+    if (e.touches.length === 2) {
+      const dist = Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY);
+      const f = dist / lastTouchDist;
+      schaal *= f; schaal = Math.min(Math.max(schaal, 0.2), 4);
+      lastTouchDist = dist;
+      updateTransform();
+    } else if (e.touches.length === 1 && isPanning) {
+      panX = e.touches[0].clientX - startPan.x;
+      panY = e.touches[0].clientY - startPan.y;
+      updateTransform();
+    }
+  }, { passive: true });
+
+  outer.addEventListener('touchend', () => { isPanning = false; });
+}
+
+function zoom(f) {
+  const outer = document.getElementById('kaartOuter');
+  const cx = outer.clientWidth / 2;
+  const cy = outer.clientHeight / 2;
+  panX = cx - (cx - panX) * f;
+  panY = cy - (cy - panY) * f;
+  schaal *= f;
+  schaal = Math.min(Math.max(schaal, 0.2), 4);
+  updateTransform();
+}
+
+function resetZoom() {
+  schaal = 0.65; panX = 20; panY = 20;
+  updateTransform();
+}
+
+function updateTransform() {
+  document.getElementById('kaartInner').style.transform = `translate(${panX}px, ${panY}px) scale(${schaal})`;
+}
+
+// ── HELPERS ──
+function openPanel()  { document.getElementById('panel').classList.add('open'); }
+function sluitPanel() { document.getElementById('panel').classList.remove('open'); geselecteerd = null; }
+
+let toastT;
+function toast(t, type) {
+  const el = document.getElementById('toast');
+  if (!t) { el.classList.remove('zichtbaar'); return; }
+  el.textContent = t; el.className = 'toast zichtbaar ' + type;
+  clearTimeout(toastT);
+  toastT = setTimeout(() => el.classList.remove('zichtbaar'), 3500);
+}
+</script>
+</body>
+</html>

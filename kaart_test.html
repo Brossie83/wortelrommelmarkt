@@ -841,11 +841,18 @@ function submitBestaandeStandhouder(nrs, meters, prijs) {
 let huidigEmail = ''; // bewaar email voor betaalstap
 
 async function slaBoekingOp(data) {
+  // Vangnet: enkel geldige genummerde plaatsen kunnen voorlopig online geboekt worden.
+  // (Letter- en KP-plaatsen volgen na de database-uitbreiding.)
+  const geldigeNrs = (data.nrs || []).map(Number).filter(Number.isFinite);
+  if (!geldigeNrs.length) {
+    toast('Deze standplaats kan nog niet online geboekt worden. Neem contact op met de organisatie.', 'fout');
+    return;
+  }
   toast('Boeking opslaan...', 'info');
   huidigEmail = data.email || ''; // bewaar voor later gebruik
   try {
-    const van = Math.min.apply(null, data.nrs);
-    const tot = Math.max.apply(null, data.nrs);
+    const van = Math.min.apply(null, geldigeNrs);
+    const tot = Math.max.apply(null, geldigeNrs);
     const isGratis = data.gratis === true;
 
     const { error } = await db.from('boekingen').insert([{

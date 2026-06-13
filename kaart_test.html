@@ -108,6 +108,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #1a2a1a; overflow: hidde
 <div class="toolbar">
   <button class="modus-knop actief" id="knop-bestaande" onclick="setModus('bestaande')">🔑 Bestaande standhouder</button>
   <button class="modus-knop" id="knop-nieuw" onclick="setModus('nieuw')">✨ Nieuwe standhouder</button>
+  <button class="modus-knop" id="knop-speciaal" onclick="openSpeciaalLijst()">📍 Speciale plaatsen</button>
   <button class="modus-knop" id="knop-beheer" onclick="setModus('beheer')" style="display:none">⚙️ Beheer</button>
   <div class="toolbar-stats">
     Vrij: <span class="v" id="stat-vrij">-</span>
@@ -865,8 +866,8 @@ async function slaBoekingOp(data) {
       gemeente: data.gemeente,
       email: data.email,
       gsm: data.gsm,
-      standnummer_van: van,
-      standnummer_tot: tot,
+      standnummer_van: String(van).padStart(3,'0'),
+      standnummer_tot: String(tot).padStart(3,'0'),
       meters: data.meters,
       prijs: isGratis ? 0 : data.prijs,
       betaald: isGratis ? true : false
@@ -925,6 +926,132 @@ async function slaBoekingOp(data) {
     toast('Inschrijving opgeslagen!', 'succes');
 
   } catch(e) {
+    console.error(e);
+    toast('Fout bij opslaan: ' + (e.message || 'probeer opnieuw'), 'fout');
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+// SPECIALE PLAATSEN (reeks 6) — apart van de gewone flow
+// Elke speciale plaats = 4 meter, EUR 10,00, los te boeken.
+// ══════════════════════════════════════════════════════════
+function openSpeciaalLijst() {
+  const lijst = standplaatsen.filter(s => s.reeks === 6).sort((a, b) => a.nummer - b.nummer);
+  if (!lijst.length) {
+    toast('Speciale plaatsen nog niet geladen — even wachten en opnieuw proberen', 'fout');
+    return;
+  }
+  const groepen = {};
+  lijst.forEach(s => {
+    const basis = String(s.nummer_display).split('-')[0];
+    (groepen[basis] = groepen[basis] || []).push(s);
+  });
+  let html = '<p style="font-size:12px;color:#666;margin-bottom:12px">Kies een speciale plaats. Elke plaats is 4 meter (EUR 10,00). Groen = vrij, rood = bezet.</p>';
+  Object.keys(groepen).forEach(basis => {
+    html += '<div style="font-size:11px;font-weight:700;color:#B8922A;text-transform:uppercase;letter-spacing:.06em;margin:10px 0 6px">' + basis + '</div>';
+    html += '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px">';
+    groepen[basis].forEach(s => {
+      const vrij = s.beschikbaar !== false;
+      html += '<button ' + (vrij ? '' : 'disabled ')
+        + 'onclick="kiesSpeciaal(' + s.nummer + ')" '
+        + 'style="padding:7px 11px;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:' + (vrij ? 'pointer' : 'not-allowed')
+        + ';background:' + (vrij ? 'rgba(46,204,113,.85)' : 'rgba(231,76,60,.7)') + ';color:#fff">'
+        + s.nummer_display + '</button>';
+    });
+    html += '</div>';
+  });
+  document.getElementById('panel-titel').textContent = 'Speciale plaatsen';
+  document.getElementById('panel-body').innerHTML = html;
+  openPanel();
+}
+
+function kiesSpeciaal(nummer) {
+  const s = standplaatsen.find(x => x.nummer === nummer);
+  if (!s) { toast('Plaats niet gevonden', 'fout'); return; }
+  if (s.beschikbaar === false) { toast('Deze plaats is intussen bezet', 'fout'); openSpeciaalLijst(); return; }
+  document.getElementById('panel-titel').textContent = 'Plaats ' + s.nummer_display;
+  document.getElementById('panel-body').innerHTML =
+    '<div class="mijn-blok"><div class="groot">Plaats ' + s.nummer_display + '</div><div class="klein">4 meter - EUR 10,00</div></div>'
+    + '<div class="info-blok" style="margin-bottom:10px">'
+    + '<div class="info-rij"><span>Standplaats</span><span>' + s.nummer_display + '</span></div>'
+    + '<div class="info-rij"><span>Meters</span><span>4 meter</span></div>'
+    + '<div class="info-rij"><span>Te betalen</span><span>EUR 10,00</span></div>'
+    + '</div>'
+    + '<input type="text" class="code-invoer" id="sp-voornaam" placeholder="Voornaam *" style="margin-bottom:6px;letter-spacing:0">'
+    + '<input type="text" class="code-invoer" id="sp-achternaam" placeholder="Achternaam *" style="margin-bottom:6px;letter-spacing:0;text-transform:none">'
+    + '<input type="text" class="code-invoer" id="sp-adres" placeholder="Straat en huisnummer *" style="margin-bottom:6px;letter-spacing:0;text-transform:none">'
+    + '<div style="display:flex;gap:6px;margin-bottom:6px">'
+    + '<input type="text" class="code-invoer" id="sp-postcode" placeholder="Postcode *" style="width:90px;letter-spacing:0;text-transform:none">'
+    + '<input type="text" class="code-invoer" id="sp-gemeente" placeholder="Gemeente *" style="flex:1;letter-spacing:0;text-transform:none">'
+    + '</div>'
+    + '<input type="email" class="code-invoer" id="sp-email" placeholder="E-mailadres *" style="margin-bottom:6px;letter-spacing:0;text-transform:none">'
+    + '<input type="tel" class="code-invoer" id="sp-gsm" placeholder="GSM-nummer *" style="margin-bottom:10px;letter-spacing:0;text-transform:none">'
+    + '<div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:12px;font-size:11px;color:#666">'
+    + '<input type="checkbox" id="sp-gdpr" style="margin-top:2px;flex-shrink:0">'
+    + '<label for="sp-gdpr">Ik ga akkoord dat Sport- en Vriendenkring Wortel mijn gegevens mag gebruiken voor de organisatie van de rommelmarkt.</label>'
+    + '</div>'
+    + '<button class="btn btn-goud" onclick="submitSpeciaal(' + nummer + ')">Doorgaan naar betaling</button>'
+    + '<button class="btn btn-rand" onclick="openSpeciaalLijst()">Terug</button>';
+  openPanel();
+}
+
+function submitSpeciaal(nummer) {
+  const v = id => (document.getElementById(id)?.value || '').trim();
+  const d = {
+    voornaam: v('sp-voornaam'), achternaam: v('sp-achternaam'), adres: v('sp-adres'),
+    postcode: v('sp-postcode'), gemeente: v('sp-gemeente'), email: v('sp-email'), gsm: v('sp-gsm')
+  };
+  const gdpr = document.getElementById('sp-gdpr')?.checked;
+  if (!d.voornaam || !d.achternaam || !d.adres || !d.postcode || !d.gemeente || !d.email || !d.gsm) {
+    toast('Vul alle verplichte velden in', 'fout'); return;
+  }
+  if (!gdpr) { toast('Ga akkoord met het gebruik van uw gegevens', 'fout'); return; }
+  slaSpeciaalOp(nummer, d);
+}
+
+async function slaSpeciaalOp(nummer, d) {
+  const s = standplaatsen.find(x => x.nummer === nummer);
+  if (!s) { toast('Plaats niet gevonden', 'fout'); return; }
+  const label = s.nummer_display;
+  const meters = 4, prijs = 10;
+  toast('Boeking opslaan...', 'info');
+  huidigEmail = d.email || '';
+  try {
+    // Laatste controle of de plaats nog vrij is
+    const check = await db.from('standplaatsen').select('beschikbaar').eq('nummer', nummer).limit(1);
+    if (check.error) throw check.error;
+    if (check.data && check.data[0] && check.data[0].beschikbaar === false) {
+      toast('Deze plaats is intussen bezet', 'fout'); openSpeciaalLijst(); return;
+    }
+    const { error } = await db.from('boekingen').insert([{
+      type: 'nieuw', code: null,
+      voornaam: d.voornaam, achternaam: d.achternaam, adres: d.adres,
+      postcode: d.postcode, gemeente: d.gemeente, email: d.email, gsm: d.gsm,
+      standnummer_van: label, standnummer_tot: label,
+      meters: meters, prijs: prijs, betaald: false
+    }]);
+    if (error) throw error;
+    await db.from('standplaatsen')
+      .update({ beschikbaar: false, geblokkeerd_tot: null, geblokkeerd_door: null })
+      .eq('nummer', nummer);
+    if (s) s.beschikbaar = false;
+    updateStats();
+    document.getElementById('panel-titel').textContent = 'Inschrijving bevestigd!';
+    document.getElementById('panel-body').innerHTML =
+      '<div class="mijn-blok"><div class="groot">Plaats ' + label + '</div><div class="klein">4 meter - EUR 10,00</div></div>'
+      + '<div class="info-blok">'
+      + '<div class="info-rij"><span>Naam</span><span>' + d.voornaam + ' ' + d.achternaam + '</span></div>'
+      + '<div class="info-rij"><span>E-mail</span><span>' + d.email + '</span></div>'
+      + '<div class="info-rij"><span>Standplaats</span><span>' + label + '</span></div>'
+      + '<div class="info-rij"><span>Meters</span><span>4 meter</span></div>'
+      + '<div class="info-rij"><span>Te betalen</span><span>EUR 10,00</span></div>'
+      + '</div>'
+      + '<p style="font-size:12px;font-weight:600;margin-bottom:10px;color:#1C2B3A">Kies uw betaalmethode:</p>'
+      + '<button class="btn btn-goud" style="margin-bottom:8px" onclick="toonQRKaart(\'' + label + '\',' + prijs + ')">📱 Betalen via QR Code (Bancontact)</button>'
+      + '<button class="btn btn-rand" onclick="toonOvKaart(\'' + label + '\',' + prijs + ')">🏦 Betalen via overschrijving</button>'
+      + '<button class="btn btn-rand" onclick="sluitPanel()">Sluiten</button>';
+    toast('Inschrijving opgeslagen!', 'succes');
+  } catch (e) {
     console.error(e);
     toast('Fout bij opslaan: ' + (e.message || 'probeer opnieuw'), 'fout');
   }

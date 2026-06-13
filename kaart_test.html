@@ -614,12 +614,16 @@ async function checkCode() {
     const rec = res.data[0];
     huidigCode = rec;
 
-    // Genereer alle standnummers van deze standhouder
+    // Genereer standnummers enkel bij zuiver numerieke plaatsen (letters/KP overslaan)
+    const vanRaw0 = String(rec.standnummer_van), totRaw0 = String(rec.standnummer_tot);
+    const numeriek0 = /^\d+$/.test(vanRaw0) && /^\d+$/.test(totRaw0);
     mijnNrs = [];
-    for (let n = Number(rec.standnummer_van); n <= Number(rec.standnummer_tot); n += 2) mijnNrs.push(n);
+    if (numeriek0) {
+      for (let n = Number(vanRaw0); n <= Number(totRaw0); n += 2) mijnNrs.push(n);
+    }
 
     herteken();
-    toast('Uw standplaatsen zijn goud gemarkeerd!', 'succes');
+    toast(numeriek0 ? 'Uw standplaatsen zijn goud gemarkeerd!' : 'Uw standplaatsen zijn gevonden!', 'succes');
 
     // Scroll naar eerste standplaats
     const eerste = document.getElementById('sp' + rec.standnummer_van);
@@ -635,26 +639,27 @@ async function checkCode() {
 
 
 function toonFormulierBestaande(rec) {
-  const van = String(rec.standnummer_van).padStart(3,'0');
-  const tot = String(rec.standnummer_tot).padStart(3,'0');
+  const fmt = x => /^\d+$/.test(String(x)) ? String(x).padStart(3,'0') : String(x);
+  const vanF = fmt(rec.standnummer_van);
+  const totF = fmt(rec.standnummer_tot);
+  const standLabel = (vanF === totF) ? vanF : vanF + '-' + totF;
   const meters = rec.meters;
-  const prijs = (meters * 2.5).toFixed(2).replace('.',',');
-  const nrs = [];
-  for (let n = Number(rec.standnummer_van); n <= Number(rec.standnummer_tot); n += 2) nrs.push(n);
+  const isGratis = rec.gratis === true;
+  const prijsTekst = isGratis ? 'Gratis' : 'EUR ' + (meters * 2.5).toFixed(2).replace('.', ',');
 
   document.getElementById('panel-titel').textContent = 'Bevestig uw gegevens';
   const b = document.getElementById('panel-body');
   b.innerHTML =
-    '<div class="mijn-blok"><div class="groot">Nrs. ' + van + '-' + tot + '</div>'
-    + '<div class="klein">' + meters + ' meter - EUR ' + prijs + '</div></div>'
+    '<div class="mijn-blok"><div class="groot">Plaats ' + standLabel + '</div>'
+    + '<div class="klein">' + meters + ' meter - ' + prijsTekst + '</div></div>'
     + '<div class="info-blok" style="margin-bottom:10px">'
-    + '<div class="info-rij"><span>Standplaatsen</span><span>Nrs. ' + van + '-' + tot + '</span></div>'
+    + '<div class="info-rij"><span>Standplaatsen</span><span>' + standLabel + '</span></div>'
     + '<div class="info-rij"><span>Meters</span><span>' + meters + ' meter</span></div>'
-    + '<div class="info-rij"><span>Te betalen</span><span>EUR ' + prijs + '</span></div>'
+    + '<div class="info-rij"><span>Te betalen</span><span>' + prijsTekst + '</span></div>'
     + '</div>'
     + '<p style="font-size:11px;color:#27AE60;margin-bottom:8px">Uw gegevens zijn vooraf ingevuld. Controleer en pas aan indien nodig.</p>'
-    + '<input type="text" class="code-invoer" id="bs-voornaam" placeholder="Voornaam *" value="' + (rec.voornaam || (rec.naam ? rec.naam.split(' ')[0] : '')) + '" style="margin-bottom:6px;letter-spacing:0;text-transform:none">'
-    + '<input type="text" class="code-invoer" id="bs-achternaam" placeholder="Achternaam *" value="' + (rec.achternaam || (rec.naam ? rec.naam.split(' ').slice(1).join(' ') : '')) + '" style="margin-bottom:6px;letter-spacing:0;text-transform:none">'
+    + '<input type="text" class="code-invoer" id="bs-voornaam" placeholder="Voornaam *" value="' + (rec.voornaam || '') + '" style="margin-bottom:6px;letter-spacing:0;text-transform:none">'
+    + '<input type="text" class="code-invoer" id="bs-achternaam" placeholder="Achternaam *" value="' + (rec.achternaam || '') + '" style="margin-bottom:6px;letter-spacing:0;text-transform:none">'
     + '<input type="text" class="code-invoer" id="bs-adres" placeholder="Straat en huisnummer *" value="' + (rec.adres || '') + '" style="margin-bottom:6px;letter-spacing:0;text-transform:none">'
     + '<div style="display:flex;gap:6px;margin-bottom:6px">'
     + '<input type="text" class="code-invoer" id="bs-postcode" placeholder="Postcode *" value="' + (rec.postcode || '') + '" style="width:90px;letter-spacing:0;text-transform:none">'
@@ -666,9 +671,82 @@ function toonFormulierBestaande(rec) {
     + '<input type="checkbox" id="bs-gdpr" style="margin-top:2px;flex-shrink:0">'
     + '<label for="bs-gdpr">Ik ga akkoord dat Sport- en Vriendenkring Wortel mijn gegevens mag gebruiken voor de organisatie van de rommelmarkt.</label>'
     + '</div>'
-    + '<button class="btn btn-goud" onclick="submitBestaandeStandhouder(' + JSON.stringify(nrs) + ',' + meters + ',' + (meters * 2.5) + ')">Doorgaan naar betaling</button>'
+    + '<button class="btn btn-goud" onclick="submitBestaande()">Doorgaan naar betaling</button>'
     + '<button class="btn btn-rand" onclick="sluitPanel()">Annuleren</button>';
   openPanel();
+}
+
+function submitBestaande() {
+  const v = id => (document.getElementById(id)?.value || '').trim();
+  const d = {
+    voornaam: v('bs-voornaam'), achternaam: v('bs-achternaam'), adres: v('bs-adres'),
+    postcode: v('bs-postcode'), gemeente: v('bs-gemeente'), email: v('bs-email'), gsm: v('bs-gsm')
+  };
+  const gdpr = document.getElementById('bs-gdpr')?.checked;
+  if (!d.voornaam || !d.achternaam || !d.adres || !d.postcode || !d.gemeente || !d.email || !d.gsm) {
+    toast('Vul alle verplichte velden in', 'fout'); return;
+  }
+  if (!gdpr) { toast('Ga akkoord met het gebruik van uw gegevens', 'fout'); return; }
+  slaBestaandeOp(d);
+}
+
+async function slaBestaandeOp(d) {
+  if (!huidigCode) { toast('Geen code geladen', 'fout'); return; }
+  const rec = huidigCode;
+  const vanRaw = String(rec.standnummer_van);
+  const totRaw = String(rec.standnummer_tot);
+  const meters = Number(rec.meters) || 0;
+  const isGratis = rec.gratis === true;
+  const prijs = isGratis ? 0 : meters * 2.5;
+  const numeriek = /^\d+$/.test(vanRaw) && /^\d+$/.test(totRaw);
+  toast('Boeking opslaan...', 'info');
+  huidigEmail = d.email || '';
+  try {
+    const { error } = await db.from('boekingen').insert([{
+      type: 'bestaande', code: rec.code || null,
+      voornaam: d.voornaam, achternaam: d.achternaam, adres: d.adres,
+      postcode: d.postcode, gemeente: d.gemeente, email: d.email, gsm: d.gsm,
+      standnummer_van: vanRaw, standnummer_tot: totRaw,
+      meters: meters, prijs: prijs, betaald: isGratis
+    }]);
+    if (error) throw error;
+    // Kaart bijwerken enkel bij zuiver numerieke plaatsen
+    if (numeriek) {
+      const van = Number(vanRaw), tot = Number(totRaw);
+      const kant = van % 2 === 0 ? 'Rechts' : 'Links';
+      await db.from('standplaatsen')
+        .update({ beschikbaar: false, geblokkeerd_tot: null, geblokkeerd_door: null })
+        .gte('nummer', van).lte('nummer', tot).eq('kant', kant);
+    }
+    await db.from('standhouder_codes').update({ gebruikt: true }).eq('code', rec.code);
+    const res = await db.from('standplaatsen')
+      .select('nummer,nummer_display,reeks,kant,beschikbaar,geblokkeerd_tot,geblokkeerd_door').order('nummer');
+    if (!res.error) standplaatsen = res.data;
+    herteken();
+    const fmt = x => /^\d+$/.test(String(x)) ? String(x).padStart(3,'0') : String(x);
+    const standLabel = (fmt(vanRaw) === fmt(totRaw)) ? fmt(vanRaw) : fmt(vanRaw) + '-' + fmt(totRaw);
+    const prijsTekst = isGratis ? 'Gratis' : 'EUR ' + prijs.toFixed(2).replace('.', ',');
+    document.getElementById('panel-titel').textContent = 'Inschrijving bevestigd!';
+    document.getElementById('panel-body').innerHTML =
+      '<div class="mijn-blok"><div class="groot">Plaats ' + standLabel + '</div><div class="klein">' + meters + ' meter - ' + prijsTekst + '</div></div>'
+      + '<div class="info-blok">'
+      + '<div class="info-rij"><span>Naam</span><span>' + d.voornaam + ' ' + d.achternaam + '</span></div>'
+      + '<div class="info-rij"><span>E-mail</span><span>' + d.email + '</span></div>'
+      + '<div class="info-rij"><span>Standplaatsen</span><span>' + standLabel + '</span></div>'
+      + '<div class="info-rij"><span>Meters</span><span>' + meters + ' meter</span></div>'
+      + '<div class="info-rij"><span>Te betalen</span><span>' + prijsTekst + '</span></div>'
+      + '</div>'
+      + (isGratis
+        ? '<p style="font-size:11px;color:#27AE60;text-align:center;margin-bottom:14px">Uw standplaats is gratis. U ontvangt een bevestiging op ' + d.email + '</p>'
+        : '<p style="font-size:12px;font-weight:600;margin-bottom:10px;color:#1C2B3A">Kies uw betaalmethode:</p>'
+          + '<button class="btn btn-goud" style="margin-bottom:8px" onclick="toonQRKaart(\'' + standLabel + '\',' + prijs + ')">📱 Betalen via QR Code (Bancontact)</button>'
+          + '<button class="btn btn-rand" onclick="toonOvKaart(\'' + standLabel + '\',' + prijs + ')">🏦 Betalen via overschrijving</button>')
+      + '<button class="btn btn-rand" onclick="sluitPanel()">Sluiten</button>';
+    toast('Inschrijving opgeslagen!', 'succes');
+  } catch (e) {
+    console.error(e);
+    toast('Fout bij opslaan: ' + (e.message || 'probeer opnieuw'), 'fout');
+  }
 }
 
 function toonPanelSelectie(sp) {

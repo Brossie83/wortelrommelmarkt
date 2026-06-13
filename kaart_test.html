@@ -616,7 +616,7 @@ async function checkCode() {
 
     // Genereer alle standnummers van deze standhouder
     mijnNrs = [];
-    for (let n = rec.standnummer_van; n <= rec.standnummer_tot; n += 2) mijnNrs.push(n);
+    for (let n = Number(rec.standnummer_van); n <= Number(rec.standnummer_tot); n += 2) mijnNrs.push(n);
 
     herteken();
     toast('Uw standplaatsen zijn goud gemarkeerd!', 'succes');
@@ -640,7 +640,7 @@ function toonFormulierBestaande(rec) {
   const meters = rec.meters;
   const prijs = (meters * 2.5).toFixed(2).replace('.',',');
   const nrs = [];
-  for (let n = rec.standnummer_van; n <= rec.standnummer_tot; n += 2) nrs.push(n);
+  for (let n = Number(rec.standnummer_van); n <= Number(rec.standnummer_tot); n += 2) nrs.push(n);
 
   document.getElementById('panel-titel').textContent = 'Bevestig uw gegevens';
   const b = document.getElementById('panel-body');
@@ -653,8 +653,8 @@ function toonFormulierBestaande(rec) {
     + '<div class="info-rij"><span>Te betalen</span><span>EUR ' + prijs + '</span></div>'
     + '</div>'
     + '<p style="font-size:11px;color:#27AE60;margin-bottom:8px">Uw gegevens zijn vooraf ingevuld. Controleer en pas aan indien nodig.</p>'
-    + '<input type="text" class="code-invoer" id="bs-voornaam" placeholder="Voornaam *" value="' + (rec.naam ? rec.naam.split(' ')[0] : '') + '" style="margin-bottom:6px;letter-spacing:0;text-transform:none">'
-    + '<input type="text" class="code-invoer" id="bs-achternaam" placeholder="Achternaam *" value="' + (rec.naam ? rec.naam.split(' ').slice(1).join(' ') : '') + '" style="margin-bottom:6px;letter-spacing:0;text-transform:none">'
+    + '<input type="text" class="code-invoer" id="bs-voornaam" placeholder="Voornaam *" value="' + (rec.voornaam || (rec.naam ? rec.naam.split(' ')[0] : '')) + '" style="margin-bottom:6px;letter-spacing:0;text-transform:none">'
+    + '<input type="text" class="code-invoer" id="bs-achternaam" placeholder="Achternaam *" value="' + (rec.achternaam || (rec.naam ? rec.naam.split(' ').slice(1).join(' ') : '')) + '" style="margin-bottom:6px;letter-spacing:0;text-transform:none">'
     + '<input type="text" class="code-invoer" id="bs-adres" placeholder="Straat en huisnummer *" value="' + (rec.adres || '') + '" style="margin-bottom:6px;letter-spacing:0;text-transform:none">'
     + '<div style="display:flex;gap:6px;margin-bottom:6px">'
     + '<input type="text" class="code-invoer" id="bs-postcode" placeholder="Postcode *" value="' + (rec.postcode || '') + '" style="width:90px;letter-spacing:0;text-transform:none">'

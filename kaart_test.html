@@ -102,7 +102,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #1a2a1a; overflow: hidde
     <h1>🗺️ Standplaatsenkaart — Wortel Rommelmarkt</h1>
     <div class="sub">Klik op een standplaats · Scroll om te zoomen · Sleep om te bewegen</div>
   </div>
-  <span class="test-badge">🧪 TESTVERSIE — letterplaatsen v3</span>
+  <span class="test-badge">🧪 TESTVERSIE — letterplaatsen v4</span>
 </div>
 
 <div class="toolbar">
@@ -227,6 +227,7 @@ window.addEventListener('load', async function() {
   try {
     const res = await db.from('standplaatsen')
       .select('nummer,nummer_display,reeks,kant,beschikbaar,geblokkeerd_tot,geblokkeerd_door')
+      .neq('reeks', 6)
       .order('nummer');
     if (res.error) throw res.error;
     standplaatsen = res.data || [];
@@ -720,7 +721,7 @@ async function slaBestaandeOp(d) {
     }
     await db.from('standhouder_codes').update({ gebruikt: true }).eq('code', rec.code);
     const res = await db.from('standplaatsen')
-      .select('nummer,nummer_display,reeks,kant,beschikbaar,geblokkeerd_tot,geblokkeerd_door').order('nummer');
+      .select('nummer,nummer_display,reeks,kant,beschikbaar,geblokkeerd_tot,geblokkeerd_door').neq('reeks', 6).order('nummer');
     if (!res.error) standplaatsen = res.data;
     herteken();
     const fmt = x => /^\d+$/.test(String(x)) ? String(x).padStart(3,'0') : String(x);

@@ -1,0 +1,40 @@
+# ============================================================
+#  Wortel Rommelmarkt — Supabase wakker houden
+#
+#  Supabase pauzeert gratis projecten na 7 dagen zonder
+#  databank-activiteit. Dit taakje stelt elke maandag en
+#  donderdag automatisch één klein vraagje aan de database,
+#  zodat de teller nooit 7 dagen bereikt.
+#
+#  Plaats dit bestand in de repo als:
+#     .github/workflows/keep-alive.yml
+#
+#  Je hoeft er verder nooit naar om te kijken.
+# ============================================================
+
+name: Supabase wakker houden
+
+on:
+  schedule:
+    # Elke maandag en donderdag om 09:00 UTC (= 11:00 Belgische zomertijd)
+    - cron: '0 9 * * 1,4'
+  # Zo kan je het ook zelf handmatig starten via de knop "Run workflow"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Database aantikken
+        run: |
+          echo "Supabase aantikken op $(date -u '+%Y-%m-%d %H:%M UTC')..."
+          CODE=$(curl -s -o /dev/null -w "%{http_code}" \
+            -H "apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InB2cWZwZ2t6aGZva2djeWFidWhuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg4MzMyNTksImV4cCI6MjA5NDQwOTI1OX0.wauNK-AeI0-WoNjiMpanX-twTr7EvJ1zWuLiqktN7SU" \
+            "https://pvqfpgkzhfokgcyabuhn.supabase.co/rest/v1/standplaatsen?select=nummer&limit=1")
+          echo "Antwoord van Supabase: HTTP $CODE"
+          if [ "$CODE" = "200" ]; then
+            echo "OK — de database is wakker."
+          else
+            echo "LET OP — onverwacht antwoord ($CODE). Controleer het project in Supabase."
+            exit 1
+          fi

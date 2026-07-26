@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://brossie83.github.io/wortelrommelmarkt/sitemap.xml

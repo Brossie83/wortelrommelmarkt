@@ -519,7 +519,7 @@ footer { background: var(--groen); color: rgba(255,255,255,0.75); padding: 48px 
         <div class="dropdown">
           <div class="dropdown-header">Informatie</div>
           <a href="#" onclick="toonSectie('standhouders');activeerTab('standhouders','praktisch');return false;">💶 Prijs &amp; praktisch</a>
-          <a href="#" onclick="toonSectie('standhouders');activeerTab('standhouders','voorwaarden');return false;">📋 Algemene voorwaarden</a>
+          <a href="#" onclick="toonSectie('standhouders');activeerTab('standhouders','voorwaarden');return false;">📋 Reglement</a>
         </div>
       </li>
       <li>
@@ -729,7 +729,7 @@ footer { background: var(--groen); color: rgba(255,255,255,0.75); padding: 48px 
     <p class="sectie-intro">Alles wat je moet weten als standhouder op de Wortel Rommelmarkt.</p>
     <div class="tabs-bar" id="tabs-standhouders">
       <button class="tab-btn actief" onclick="activeerTab('standhouders','praktisch',this)">💶 Prijs &amp; praktisch</button>
-      <button class="tab-btn" onclick="activeerTab('standhouders','voorwaarden',this)">📋 Algemene voorwaarden</button>
+      <button class="tab-btn" onclick="activeerTab('standhouders','voorwaarden',this)">📋 Reglement</button>
     </div>
     <div class="tab-content actief" id="standhouders-praktisch">
       <table class="info-tabel">
@@ -934,7 +934,7 @@ footer { background: var(--groen); color: rgba(255,255,255,0.75); padding: 48px 
       <ul>
         <li><a href="#" onclick="toonSectie('inschrijven');return false;">Inschrijven</a></li>
         <li><a href="#" onclick="toonSectie('standhouders');return false;">Info standhouders</a></li>
-        <li><a href="#" onclick="toonSectie('standhouders');activeerTab('standhouders','voorwaarden');return false;">Algemene voorwaarden</a></li>
+        <li><a href="#" onclick="toonSectie('standhouders');activeerTab('standhouders','voorwaarden');return false;">Reglement</a></li>
       </ul>
     </div>
     <div class="footer-col">
@@ -957,18 +957,30 @@ const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 const { createClient } = supabase;
 const db = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// Sfeerfoto's ophalen uit Supabase Storage (bucket 'fotos'); bestaande foto's blijven staan als er nog niets is
+// Sfeerfoto's + filmpjes ophalen uit Supabase Storage (bucket 'fotos'); bestaande media blijven staan als er nog niets is
 async function laadSfeerfotos() {
   try {
-    const { data, error } = await db.storage.from('fotos').list('', { limit: 100, sortBy: { column: 'name', order: 'asc' } });
+    const { data, error } = await db.storage.from('fotos').list('', { limit: 500, sortBy: { column: 'name', order: 'asc' } });
     if (error || !data) return;
-    const fotos = data.filter(f => f.name && !f.name.startsWith('.') && /\.(jpe?g|png|webp|gif)$/i.test(f.name));
-    if (!fotos.length) return;
+    const isMedia = n => /\.(jpe?g|png|webp|gif|mp4|webm|mov|m4v|ogg|ogv)$/i.test(n);
+    const isVideo = n => /\.(mp4|webm|mov|m4v|ogg|ogv)$/i.test(n);
+    let bestanden = data.filter(f => f.name && !f.name.startsWith('.') && isMedia(f.name)).map(f => f.name);
+    if (!bestanden.length) return;
+    let order = [];
+    try {
+      const r = await db.from('instellingen').select('waarde').eq('sleutel', 'foto_volgorde').maybeSingle();
+      if (r.data && r.data.waarde) order = JSON.parse(r.data.waarde);
+    } catch(e) {}
+    const geordend = order.filter(n => bestanden.includes(n));
+    bestanden.forEach(n => { if (!geordend.includes(n)) geordend.push(n); });
     const grid = document.getElementById('foto-grid');
     if (!grid) return;
-    grid.innerHTML = fotos.map(f => {
-      const url = db.storage.from('fotos').getPublicUrl(f.name).data.publicUrl;
-      return '<div class="foto-item" style="background:#1a4a1a"><img src="' + url + '" alt="Sfeerfoto Wortel Rommelmarkt" style="width:100%;height:100%;object-fit:cover;cursor:zoom-in" onclick="openLightbox(this.src)"><div class="foto-overlay"></div></div>';
+    grid.innerHTML = geordend.map(naam => {
+      const url = db.storage.from('fotos').getPublicUrl(naam).data.publicUrl;
+      const inner = isVideo(naam)
+        ? '<video src="' + url + '" style="width:100%;height:100%;object-fit:cover;background:#000" preload="metadata" controls></video>'
+        : '<img src="' + url + '" alt="Sfeerfoto Wortel Rommelmarkt" style="width:100%;height:100%;object-fit:cover;cursor:zoom-in" onclick="openLightbox(this.src)">';
+      return '<div class="foto-item" style="background:#1a4a1a">' + inner + '<div class="foto-overlay"></div></div>';
     }).join('');
   } catch(e) { /* laat de bestaande foto's staan */ }
 }

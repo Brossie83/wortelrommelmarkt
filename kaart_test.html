@@ -241,6 +241,12 @@ window.addEventListener('load', async function() {
 
   initPanZoom();
   updateTransform();
+
+  // Modus overnemen uit de link (bv. vanaf de website: ?modus=nieuw)
+  try {
+    const p = new URLSearchParams(location.search).get('modus');
+    if (p === 'nieuw' || p === 'bestaande') setModus(p);
+  } catch(e) {}
 });
 
 // ── SVG ACHTERGROND BOUWEN ──

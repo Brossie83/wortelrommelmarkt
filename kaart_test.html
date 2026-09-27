@@ -102,7 +102,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #1a2a1a; overflow: hidde
     <h1>🗺️ Standplaatsenkaart — Wortel Rommelmarkt</h1>
     <div class="sub">Klik op een standplaats · Scroll om te zoomen · Sleep om te bewegen</div>
   </div>
-  <span class="test-badge">🧪 TESTVERSIE — letterplaatsen v4</span>
+  <span class="test-badge">🧪 TESTVERSIE — letterplaatsen v5</span>
 </div>
 
 <div class="toolbar">
@@ -610,7 +610,7 @@ async function checkCode() {
   if (!toegang) return;
   toast('Controleren...', 'info');
   try {
-    const res = await db.from('standhouder_codes').select('*,gratis,categorie').eq('code', code).limit(1);
+    const res = await db.rpc('code_ophalen', { p_code: code });
     if (res.error || !res.data?.length) { toast('Code niet gevonden', 'fout'); return; }
     const rec = res.data[0];
     huidigCode = rec;
@@ -703,23 +703,19 @@ async function slaBestaandeOp(d) {
   toast('Boeking opslaan...', 'info');
   huidigEmail = d.email || '';
   try {
-    const { error } = await db.from('boekingen').insert([{
-      type: 'bestaande', code: rec.code || null,
-      voornaam: d.voornaam, achternaam: d.achternaam, adres: d.adres,
-      postcode: d.postcode, gemeente: d.gemeente, email: d.email, gsm: d.gsm,
-      standnummer_van: vanRaw, standnummer_tot: totRaw,
-      meters: meters, prijs: prijs, betaald: isGratis
-    }]);
-    if (error) throw error;
-    // Kaart bijwerken enkel bij zuiver numerieke plaatsen
+    let bsNummers = [];
     if (numeriek) {
       const van = Number(vanRaw), tot = Number(totRaw);
-      const kant = van % 2 === 0 ? 'Rechts' : 'Links';
-      await db.from('standplaatsen')
-        .update({ beschikbaar: false, geblokkeerd_tot: null, geblokkeerd_door: null })
-        .gte('nummer', van).lte('nummer', tot).eq('kant', kant);
+      for (let n = van; n <= tot; n += 2) bsNummers.push(n);
     }
-    await db.from('standhouder_codes').update({ gebruikt: true }).eq('code', rec.code);
+    const { error } = await db.rpc('boeking_indienen', {
+      p_type: 'bestaande', p_code: rec.code || null,
+      p_voornaam: d.voornaam, p_achternaam: d.achternaam, p_adres: d.adres,
+      p_postcode: d.postcode, p_gemeente: d.gemeente, p_email: d.email, p_gsm: d.gsm,
+      p_standnummer_van: vanRaw, p_standnummer_tot: totRaw,
+      p_meters: meters, p_prijs: prijs, p_betaald: isGratis, p_nummers: bsNummers
+    });
+    if (error) throw error;
     const res = await db.from('standplaatsen')
       .select('nummer,nummer_display,reeks,kant,beschikbaar,geblokkeerd_tot,geblokkeerd_door').neq('reeks', 6).order('nummer');
     if (!res.error) standplaatsen = res.data;
@@ -799,10 +795,8 @@ async function bevestigNieuwMeervoudig(nrs) {
   toast('Reserveren...', 'info');
   try {
     const verloop = new Date(Date.now() + 600000).toISOString();
+    await db.rpc('plaats_blokkeren', { p_nummers: nrs, p_sessie: sessie });
     for (const n of nrs) {
-      await db.from('standplaatsen')
-        .update({ geblokkeerd_tot: verloop, geblokkeerd_door: sessie })
-        .eq('nummer', n).eq('beschikbaar', true);
       const sp = standplaatsen.find(s => s.nummer === n);
       if (sp) { sp.geblokkeerd_tot = verloop; sp.geblokkeerd_door = sessie; }
     }
@@ -934,39 +928,27 @@ async function slaBoekingOp(data) {
     const tot = Math.max.apply(null, geldigeNrs);
     const isGratis = data.gratis === true;
 
-    const { error } = await db.from('boekingen').insert([{
-      type: data.type,
-      code: data.code || null,
-      voornaam: data.voornaam,
-      achternaam: data.achternaam,
-      adres: data.adres,
-      postcode: data.postcode,
-      gemeente: data.gemeente,
-      email: data.email,
-      gsm: data.gsm,
-      standnummer_van: String(van).padStart(3,'0'),
-      standnummer_tot: String(tot).padStart(3,'0'),
-      meters: data.meters,
-      prijs: isGratis ? 0 : data.prijs,
-      betaald: isGratis ? true : false
-    }]);
+    const nwNummers = [];
+    for (let n = van; n <= tot; n += 2) nwNummers.push(n);
+    const { error } = await db.rpc('boeking_indienen', {
+      p_type: data.type,
+      p_code: data.code || null,
+      p_voornaam: data.voornaam,
+      p_achternaam: data.achternaam,
+      p_adres: data.adres,
+      p_postcode: data.postcode,
+      p_gemeente: data.gemeente,
+      p_email: data.email,
+      p_gsm: data.gsm,
+      p_standnummer_van: String(van).padStart(3,'0'),
+      p_standnummer_tot: String(tot).padStart(3,'0'),
+      p_meters: data.meters,
+      p_prijs: isGratis ? 0 : data.prijs,
+      p_betaald: isGratis ? true : false,
+      p_nummers: nwNummers
+    });
 
     if (error) throw error;
-
-    // Zet standplaatsen definitief bezet
-    const kant = van % 2 === 0 ? 'Rechts' : 'Links';
-    await db.from('standplaatsen')
-      .update({ beschikbaar: false, geblokkeerd_tot: null, geblokkeerd_door: null })
-      .gte('nummer', van)
-      .lte('nummer', tot)
-      .eq('kant', kant);
-
-    // Als bestaande standhouder: code als gebruikt markeren
-    if (data.code) {
-      await db.from('standhouder_codes')
-        .update({ gebruikt: true })
-        .eq('code', data.code);
-    }
 
     // Herlaad standplaatsen
     const res = await db.from('standplaatsen')
@@ -1101,17 +1083,14 @@ async function slaSpeciaalOp(nummer, d) {
     if (check.data && check.data[0] && check.data[0].beschikbaar === false) {
       toast('Deze plaats is intussen bezet', 'fout'); openSpeciaalLijst(); return;
     }
-    const { error } = await db.from('boekingen').insert([{
-      type: 'nieuw', code: null,
-      voornaam: d.voornaam, achternaam: d.achternaam, adres: d.adres,
-      postcode: d.postcode, gemeente: d.gemeente, email: d.email, gsm: d.gsm,
-      standnummer_van: label, standnummer_tot: label,
-      meters: meters, prijs: prijs, betaald: false
-    }]);
+    const { error } = await db.rpc('boeking_indienen', {
+      p_type: 'nieuw', p_code: null,
+      p_voornaam: d.voornaam, p_achternaam: d.achternaam, p_adres: d.adres,
+      p_postcode: d.postcode, p_gemeente: d.gemeente, p_email: d.email, p_gsm: d.gsm,
+      p_standnummer_van: label, p_standnummer_tot: label,
+      p_meters: meters, p_prijs: prijs, p_betaald: false, p_nummers: [nummer]
+    });
     if (error) throw error;
-    await db.from('standplaatsen')
-      .update({ beschikbaar: false, geblokkeerd_tot: null, geblokkeerd_door: null })
-      .eq('nummer', nummer);
     if (s) s.beschikbaar = false;
     updateStats();
     document.getElementById('panel-titel').textContent = 'Inschrijving bevestigd!';

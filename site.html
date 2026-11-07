@@ -249,11 +249,11 @@ footer.ft{background:var(--groen-900);color:#cfe0cc;padding:48px 0 30px;margin-t
     </button>
     <nav class="menu" id="menu">
       <a data-p="home" onclick="toon('home')">Home</a>
-      <a data-p="inschrijven" onclick="toon('inschrijven')">Inschrijven</a>
       <a data-p="info-bezoekers" onclick="toon('info-bezoekers')">Info bezoekers</a>
+      <a data-p="standhouders" onclick="toon('standhouders')">Info standhouders</a>
     </nav>
     <div class="nav-cta">
-      <a class="btn btn-goud" onclick="toon('inschrijven')">Inschrijven</a>
+      <a class="btn btn-goud" onclick="naarInschrijving()">Inschrijven</a>
       <button class="burger" aria-label="Menu" onclick="document.getElementById('menu').classList.toggle('open')"><span></span><span></span><span></span></button>
     </div>
   </div>
@@ -268,7 +268,7 @@ footer.ft{background:var(--groen-900);color:#cfe0cc;padding:48px 0 30px;margin-t
       <div class="eyebrow">Elk jaar op Pinkstermaandag</div>
       <h1>Wortel Rommelmarkt</h1>
       <p class="sub">De gezelligste rommelmarkt van de Kempen, in de prachtige dreven van Wortel Kolonie.</p>
-      <a class="btn btn-goud" onclick="toon('inschrijven')">Inschrijven als standhouder</a>
+      <a class="btn btn-goud" onclick="naarInschrijving()">Inschrijven als standhouder</a>
     </div>
   </section>
 
@@ -299,7 +299,7 @@ footer.ft{background:var(--groen-900);color:#cfe0cc;padding:48px 0 30px;margin-t
           <div class="ic"><svg fill="none" stroke-width="2" viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 013 3L7 19l-4 1 1-4z"/></svg></div>
           <h3>Inschrijven als standhouder</h3>
           <p>Bestaande standhouders krijgen voorrang. Nieuwe inschrijvingen openen later op een vaste datum.</p>
-          <a class="btn btn-groen" onclick="toon('inschrijven')">Nu inschrijven</a>
+          <a class="btn btn-groen" onclick="naarInschrijving()">Nu inschrijven</a>
         </div>
         <div class="card">
           <div class="ic"><svg fill="none" stroke-width="2" viewBox="0 0 24 24"><path d="M9 20l-6-3V4l6 3 6-3 6 3v13l-6-3-6 3zM9 7v13M15 4v13"/></svg></div>
@@ -391,13 +391,13 @@ footer.ft{background:var(--groen-900);color:#cfe0cc;padding:48px 0 30px;margin-t
 </div>
 
 <!-- ============ INSCHRIJVEN ============ -->
-<div class="pagina" id="pg-inschrijven">
-  <section class="blok">
+<div class="pagina" id="pg-standhouders">
+  <section class="blok" id="inschrijving">
     <div class="wrap">
       <div class="kop">
-        <span class="label">Standhouders</span>
+        <span class="label">Voor standhouders</span>
         <h2>Inschrijven als standhouder</h2>
-        <p>Kies hieronder of je al eerder standhouder was of voor de eerste keer inschrijft.</p>
+        <p>Kies hieronder of je al eerder standhouder was of voor de eerste keer inschrijft. Lees verder voor de prijzen en het reglement.</p>
       </div>
 
       <div class="keuze">
@@ -551,8 +551,8 @@ footer.ft{background:var(--groen-900);color:#cfe0cc;padding:48px 0 30px;margin-t
       </div>
       <div class="ft-links">
         <a onclick="toon('home')">Home</a>
-        <a onclick="toon('inschrijven')">Inschrijven</a>
         <a onclick="toon('info-bezoekers')">Info bezoekers</a>
+        <a onclick="naarInschrijving()">Info standhouders</a>
         <a onclick="toon('home');setTimeout(()=>scrollNaar('contact'),60)">Contact</a>
         <a href="https://www.facebook.com" target="_blank" rel="noopener">Facebook</a>
       </div>
@@ -606,7 +606,7 @@ const ARTIKELS = [
 })();
 
 // ---- navigatie tussen pagina's ----
-const PAGINAS=['home','inschrijven','info-bezoekers'];
+const PAGINAS=['home','info-bezoekers','standhouders'];
 function toon(p){
   if(!PAGINAS.includes(p))p='home';
   PAGINAS.forEach(x=>document.getElementById('pg-'+x).classList.toggle('actief',x===p));
@@ -616,6 +616,7 @@ function toon(p){
   window.scrollTo({top:0,behavior:'auto'});
 }
 function scrollNaar(id){const el=document.getElementById(id);if(el)el.scrollIntoView({behavior:'smooth',block:'start'});}
+function naarInschrijving(){toon('standhouders');setTimeout(()=>scrollNaar('inschrijving'),70);}
 window.addEventListener('hashchange',()=>toon(location.hash.slice(1)));
 toon(location.hash.slice(1)||'home');
 

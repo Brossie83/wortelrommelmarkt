@@ -158,48 +158,59 @@ const db = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 // Gebaseerd op de plattegrond 2017
 // Eenheid: pixels op de kaart (1px = ~0.5m in werkelijkheid)
 
-const KAART_B = 1400;  // breedte canvas
-const KAART_H = 1800;  // hoogte canvas
-const SP_B = 14;       // breedte standplaats blokje
-const SP_H = 10;       // hoogte standplaats blokje
+const SP_B = 13;       // breedte standplaats blokje
+const SP_H = 9;        // hoogte standplaats blokje
 const SP_GAP = 2;      // ruimte tussen blokjes
+const VSTEP = SP_H + SP_GAP;   // verticale stap tussen blokjes
+const HSTEP = SP_B + SP_GAP;   // horizontale stap tussen blokjes
+const CX = 1800, CY = 1250;    // centraal kruispunt
+const DH = 22;                 // halve dreefbreedte
+const MARGIN = 46;             // vrije ruimte rond het kruispunt
+const KAART_B = 2850;  // breedte canvas
+const KAART_H = 2650;  // hoogte canvas
 
-// DREEF DEFINITIES
-// Elke dreef heeft: startX, startY, richting, en reeks
-// Verticale dreven: standplaatsen lopen van noord naar zuid
-// sp_per_kant = aantal standplaatsen per kant
-
+// DREEF DEFINITIES — alles vertrekt radiaal vanuit het centrale kruispunt.
+//   richting: noord = omhoog, zuid = omlaag, west = links, oost = rechts
+//   odd  = oneven nummers (linker- bij verticaal / boven- bij horizontaal)
+//   even = even nummers   (rechter- bij verticaal / onder- bij horizontaal)
+// De reeks- en nummerlogica blijft identiek aan de database; enkel de tekening wijzigt.
 const DREVEN = [
-  // DREEF 1: nrs 001-199 — verticaal, centrale dreef
-  { id: 'd1', x: 320, y: 120, richting: 'v', reeks: 1,
-    links_van: 1,   links_tot: 199, links_stap: 2,
-    rechts_van: 2,  rechts_tot: 198, rechts_stap: 2,
-    naam: 'Dreef 1 (001–199)' },
-
-  // DREEF 2: nrs 200-399 — verticaal, parallel aan dreef 1
-  { id: 'd2', x: 520, y: 120, richting: 'v', reeks: 2,
-    links_van: 201, links_tot: 399, links_stap: 2,
-    rechts_van: 200, rechts_tot: 398, rechts_stap: 2,
-    naam: 'Dreef 2 (200–399)' },
-
-  // DREEF 3: nrs 500-699 — verticaal
-  { id: 'd3', x: 720, y: 120, richting: 'v', reeks: 4,
-    links_van: 501, links_tot: 699, links_stap: 2,
-    rechts_van: 500, rechts_tot: 698, rechts_stap: 2,
-    naam: 'Dreef 3 (500–699)' },
-
-  // DREEF 4: nrs 800-899 — verticaal, meest rechts
-  { id: 'd4', x: 920, y: 120, richting: 'v', reeks: 5,
-    links_van: 801, links_tot: 899, links_stap: 2,
-    rechts_van: 800, rechts_tot: 898, rechts_stap: 2,
-    naam: 'Dreef 4 (800–899)' },
-
-  // DREEF 5: nrs 400-499 — horizontaal (Schooldreef)
-  { id: 'd5', x: 160, y: 780, richting: 'h', reeks: 3,
-    links_van: 401, links_tot: 499, links_stap: 2,
-    rechts_van: 400, rechts_tot: 498, rechts_stap: 2,
-    naam: 'Schooldreef (400–499)' },
+  { reeks: 1, richting: 'noord', ax: CX,      ay: CY,            odd: [1, 199],   even: [2, 198],   naam: 'Reeks 1 — Molendreef (001–199)' },
+  { reeks: 2, richting: 'zuid',  ax: CX,      ay: CY,            odd: [201, 399], even: [200, 398], naam: 'Reeks 2 — Pampa (200–399)' },
+  { reeks: 4, richting: 'west',  ax: CX,      ay: CY,            odd: [501, 699], even: [500, 698], naam: 'Reeks 4 (500–699)' },
+  { reeks: 3, richting: 'oost',  ax: CX,      ay: CY,            odd: [401, 499], even: [400, 498], naam: 'Reeks 3 (400–499)' },
+  { reeks: 5, richting: 'west',  ax: CX - DH, ay: CY - 72*VSTEP, odd: [801, 899], even: [800, 898], naam: 'Schooldreef — Reeks 5 (800–899)' },
 ];
+
+// Nummerlijst per kant (stap 2 = even/oneven)
+function reeksLijst(van, tot){ const a=[]; for(let n=van;n<=tot;n+=2) a.push(n); return a; }
+
+// Positie van blokje i (index vanaf het kruispunt) op een kant van een dreef
+function spPos(dreef, soort, i){
+  const ax = dreef.ax ?? CX, ay = dreef.ay ?? CY;
+  const vert = dreef.richting==='noord' || dreef.richting==='zuid';
+  if (vert) {
+    const x = soort==='odd' ? ax - DH - SP_B - 3 : ax + DH + 3;
+    const dir = dreef.richting==='noord' ? -1 : 1;
+    const y = ay + dir*(MARGIN + i*VSTEP) - (dir<0 ? SP_H : 0);
+    return [x, y];
+  } else {
+    const y = soort==='odd' ? ay - DH - SP_H - 3 : ay + DH + 3;
+    const dir = dreef.richting==='west' ? -1 : 1;
+    const x = ax + dir*(MARGIN + i*HSTEP) - (dir<0 ? SP_B : 0);
+    return [x, y];
+  }
+}
+
+// Rechthoek (verhard pad) voor de arm van een dreef
+function armRect(dreef){
+  const ax = dreef.ax ?? CX, ay = dreef.ay ?? CY;
+  const n = Math.max((dreef.odd[1]-dreef.odd[0])/2, (dreef.even[1]-dreef.even[0])/2) + 1;
+  if (dreef.richting==='noord') return { x:ax-DH, y:ay-MARGIN-n*VSTEP, w:DH*2, h:MARGIN+n*VSTEP };
+  if (dreef.richting==='zuid')  return { x:ax-DH, y:ay,                w:DH*2, h:MARGIN+n*VSTEP };
+  if (dreef.richting==='west')  return { x:ax-MARGIN-n*HSTEP, y:ay-DH,  w:MARGIN+n*HSTEP, h:DH*2 };
+  return { x:ax, y:ay-DH, w:MARGIN+n*HSTEP, h:DH*2 };  // oost
+}
 
 // ── STATE ──
 let standplaatsen = [];
@@ -240,7 +251,7 @@ window.addEventListener('load', async function() {
   }
 
   initPanZoom();
-  updateTransform();
+  resetZoom();
 
   // Modus overnemen uit de link (bv. vanaf de website: ?modus=nieuw)
   try {
@@ -256,65 +267,46 @@ function bouwSvgAchtergrond() {
   svg.setAttribute('height', KAART_H);
   svg.setAttribute('viewBox', '0 0 ' + KAART_B + ' ' + KAART_H);
 
-  let svgHtml = '';
-
-  // Achtergrond
-  svgHtml += `<rect width="${KAART_B}" height="${KAART_H}" fill="#2d4a2d"/>`;
+  let s = '';
 
   // Gras achtergrond
-  svgHtml += `<rect x="0" y="0" width="${KAART_B}" height="${KAART_H}" fill="#3a5a3a" rx="0"/>`;
+  s += `<rect width="${KAART_B}" height="${KAART_H}" fill="#3a5a3a"/>`;
 
-  // Parking links
-  svgHtml += `<rect x="20" y="700" width="120" height="300" fill="#555" rx="4"/>`;
-  svgHtml += `<text x="80" y="858" fill="#fff" font-size="14" text-anchor="middle" font-weight="bold">P</text>`;
-  svgHtml += `<text x="80" y="875" fill="#ccc" font-size="9" text-anchor="middle">PARKING</text>`;
-
-  // Gevangenis/Kolonie rechtsboven
-  svgHtml += `<rect x="1050" y="20" width="320" height="500" fill="#8a8a7a" rx="4"/>`;
-  svgHtml += `<text x="1210" y="270" fill="#fff" font-size="11" text-anchor="middle">GEVANGENIS</text>`;
-  svgHtml += `<text x="1210" y="285" fill="#ccc" font-size="9" text-anchor="middle">KOLONIE</text>`;
-
-  // Verticale dreven bouwen
-  DREVEN.filter(d => d.richting === 'v').forEach(dreef => {
-    const dreefB = 40; // breedte van de dreef (pad)
-    const linksX = dreef.x - dreefB/2 - 32;
-    const rechtsX = dreef.x + dreefB/2 + 2;
-    const dreefH = KAART_H - dreef.y - 60;
-
-    // Dreef pad
-    svgHtml += `<rect x="${dreef.x - dreefB/2}" y="${dreef.y}" width="${dreefB}" height="${dreefH}" fill="#c8b88a"/>`;
-    // Bomen links
-    for (let y = dreef.y + 20; y < dreef.y + dreefH - 20; y += 35) {
-      svgHtml += `<circle cx="${dreef.x - dreefB/2 - 20}" cy="${y}" r="12" fill="#2a5a2a" opacity=".8"/>`;
-      svgHtml += `<circle cx="${dreef.x + dreefB/2 + 20}" cy="${y}" r="12" fill="#2a5a2a" opacity=".8"/>`;
-    }
-    // Label
-    svgHtml += `<text x="${dreef.x}" y="${dreef.y - 6}" fill="#fff" font-size="9" text-anchor="middle" font-weight="bold" opacity=".7">${dreef.naam}</text>`;
+  // Dreef-armen (verhard pad), radiaal vanuit het kruispunt
+  DREVEN.forEach(d => {
+    const r = armRect(d);
+    s += `<rect x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" fill="#c8b88a"/>`;
   });
 
-  // Horizontale dreef (Schooldreef)
-  const sd = DREVEN.find(d => d.richting === 'h');
-  if (sd) {
-    const dreefH2 = 40;
-    const dreefB2 = KAART_B - sd.x - 100;
-    svgHtml += `<rect x="${sd.x}" y="${sd.y - dreefH2/2}" width="${dreefB2}" height="${dreefH2}" fill="#c8b88a"/>`;
-    // Bomen
-    for (let x = sd.x + 20; x < sd.x + dreefB2 - 20; x += 35) {
-      svgHtml += `<circle cx="${x}" cy="${sd.y - dreefH2/2 - 14}" r="10" fill="#2a5a2a" opacity=".8"/>`;
-      svgHtml += `<circle cx="${x}" cy="${sd.y + dreefH2/2 + 14}" r="10" fill="#2a5a2a" opacity=".8"/>`;
-    }
-    svgHtml += `<text x="${sd.x + 10}" y="${sd.y - dreefH2/2 - 4}" fill="#fff" font-size="9" font-weight="bold" opacity=".7">SCHOOLDREEF (400–499)</text>`;
-  }
+  // Centraal kruispunt
+  s += `<rect x="${CX-DH}" y="${CY-DH}" width="${DH*2}" height="${DH*2}" fill="#b0a080"/>`;
+  s += `<circle cx="${CX}" cy="${CY}" r="10" fill="#8a7a60"/>`;
 
-  // Ingang/kruispunt
-  svgHtml += `<rect x="295" y="755" width="70" height="70" fill="#a09080" rx="2"/>`;
-  svgHtml += `<text x="330" y="795" fill="#fff" font-size="8" text-anchor="middle">INGANG</text>`;
+  // Gevangenis — boven de 400-nummers (reeks 3, rechterarm)
+  const gvX = CX + MARGIN, gvY = CY - DH - SP_H - 30 - 360, gvB = 760, gvH = 360;
+  s += `<rect x="${gvX}" y="${gvY}" width="${gvB}" height="${gvH}" fill="#8a8a7a" opacity=".85" rx="4"/>`;
+  s += `<text x="${gvX + gvB/2}" y="${gvY + gvH/2}" fill="#fff" font-size="30" text-anchor="middle" font-weight="bold">GEVANGENIS</text>`;
 
-  // Noord pijl
-  svgHtml += `<text x="40" y="40" fill="#fff" font-size="18" text-anchor="middle">↑</text>`;
-  svgHtml += `<text x="40" y="55" fill="#fff" font-size="9" text-anchor="middle">N</text>`;
+  // Richtinglabels aan het einde van de hoofdarmen
+  s += `<text x="${CX}" y="${CY - MARGIN - 100*VSTEP - 20}" fill="#fff" font-size="28" text-anchor="middle" font-weight="bold">MOLENDREEF ↑</text>`;
+  s += `<text x="${CX}" y="${CY + MARGIN + 100*VSTEP + 40}" fill="#fff" font-size="28" text-anchor="middle" font-weight="bold">PAMPA ↓</text>`;
 
-  svg.innerHTML = svgHtml;
+  // Reeks-labels dicht bij het kruispunt
+  DREVEN.forEach(d => {
+    const ax = d.ax ?? CX, ay = d.ay ?? CY;
+    let lx, ly, anc = 'middle';
+    if (d.richting==='noord'){ lx=ax+70;  ly=ay-200;     anc='start'; }
+    if (d.richting==='zuid'){  lx=ax+70;  ly=ay+200;     anc='start'; }
+    if (d.richting==='west'){  lx=ax-200; ly=ay-DH-14;   anc='middle'; }
+    if (d.richting==='oost'){  lx=ax+200; ly=ay-DH-14;   anc='middle'; }
+    s += `<text x="${lx}" y="${ly}" fill="#fff" font-size="22" text-anchor="${anc}" font-weight="bold" opacity=".85">${d.naam}</text>`;
+  });
+
+  // Noordpijl
+  s += `<text x="70" y="64" fill="#fff" font-size="30" text-anchor="middle">↑</text>`;
+  s += `<text x="70" y="90" fill="#fff" font-size="15" text-anchor="middle">N</text>`;
+
+  svg.innerHTML = s;
 }
 
 // ── STANDPLAATSEN OVERLAY BOUWEN ──
@@ -325,63 +317,20 @@ function bouwSpOverlay() {
   overlay.innerHTML = '';
 
   DREVEN.forEach(dreef => {
-    if (dreef.richting === 'v') {
-      bouwVertikaleStanden(overlay, dreef);
-    } else {
-      bouwHorizontaleStanden(overlay, dreef);
-    }
-  });
-}
-
-function bouwVertikaleStanden(overlay, dreef) {
-  const dreefB = 40;
-  const linksX = dreef.x - dreefB/2 - SP_B - 4;
-  const rechtsX = dreef.x + dreefB/2 + 4;
-
-  // Linkerkant (oneven)
-  let nrs = [];
-  for (let n = dreef.links_van; n <= dreef.links_tot; n += dreef.links_stap) nrs.push(n);
-  nrs.forEach((nr, i) => {
-    const sp = standplaatsen.find(s => s.nummer === nr);
-    if (!sp) return;
-    const y = dreef.y + i * (SP_H + SP_GAP);
-    maakSpEl(overlay, sp, linksX, y, SP_B, SP_H);
-  });
-
-  // Rechterkant (even)
-  nrs = [];
-  for (let n = dreef.rechts_van; n <= dreef.rechts_tot; n += dreef.rechts_stap) nrs.push(n);
-  nrs.forEach((nr, i) => {
-    const sp = standplaatsen.find(s => s.nummer === nr);
-    if (!sp) return;
-    const y = dreef.y + i * (SP_H + SP_GAP);
-    maakSpEl(overlay, sp, rechtsX, y, SP_B, SP_H);
-  });
-}
-
-function bouwHorizontaleStanden(overlay, dreef) {
-  const dreefH2 = 40;
-  const bovenY = dreef.y - dreefH2/2 - SP_H - 4;
-  const onderY = dreef.y + dreefH2/2 + 4;
-
-  // Bovenkant (oneven)
-  let nrs = [];
-  for (let n = dreef.links_van; n <= dreef.links_tot; n += dreef.links_stap) nrs.push(n);
-  nrs.forEach((nr, i) => {
-    const sp = standplaatsen.find(s => s.nummer === nr);
-    if (!sp) return;
-    const x = dreef.x + i * (SP_B + SP_GAP);
-    maakSpEl(overlay, sp, x, bovenY, SP_B, SP_H);
-  });
-
-  // Onderkant (even)
-  nrs = [];
-  for (let n = dreef.rechts_van; n <= dreef.rechts_tot; n += dreef.rechts_stap) nrs.push(n);
-  nrs.forEach((nr, i) => {
-    const sp = standplaatsen.find(s => s.nummer === nr);
-    if (!sp) return;
-    const x = dreef.x + i * (SP_B + SP_GAP);
-    maakSpEl(overlay, sp, x, onderY, SP_B, SP_H);
+    // Oneven kant
+    reeksLijst(dreef.odd[0], dreef.odd[1]).forEach((nr, i) => {
+      const sp = standplaatsen.find(s => s.nummer === nr);
+      if (!sp) return;
+      const [x, y] = spPos(dreef, 'odd', i);
+      maakSpEl(overlay, sp, x, y, SP_B, SP_H);
+    });
+    // Even kant
+    reeksLijst(dreef.even[0], dreef.even[1]).forEach((nr, i) => {
+      const sp = standplaatsen.find(s => s.nummer === nr);
+      if (!sp) return;
+      const [x, y] = spPos(dreef, 'even', i);
+      maakSpEl(overlay, sp, x, y, SP_B, SP_H);
+    });
   });
 }
 
@@ -1293,7 +1242,14 @@ function zoom(f) {
 }
 
 function resetZoom() {
-  schaal = 0.65; panX = 20; panY = 20;
+  // Pas de hele kaart in het venster
+  const outer = document.getElementById('kaartOuter');
+  const bw = outer.clientWidth || 1000;
+  const bh = outer.clientHeight || 700;
+  schaal = Math.min(bw / KAART_B, bh / KAART_H) * 0.96;
+  schaal = Math.min(Math.max(schaal, 0.2), 4);
+  panX = (bw - KAART_B * schaal) / 2;
+  panY = (bh - KAART_H * schaal) / 2;
   updateTransform();
 }
 

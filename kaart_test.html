@@ -568,6 +568,10 @@ async function checkCode() {
     const res = await db.rpc('code_ophalen', { p_code: code });
     if (res.error || !res.data?.length) { toast('Code niet gevonden', 'fout'); return; }
     const rec = res.data[0];
+    if (rec.gebruikt === true) {
+      toast('Deze code is al gebruikt voor een inschrijving.', 'fout');
+      return;
+    }
     huidigCode = rec;
 
     // Genereer standnummers enkel bij zuiver numerieke plaatsen (letters/KP overslaan)
